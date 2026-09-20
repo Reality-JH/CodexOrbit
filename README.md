@@ -16,7 +16,7 @@
 ![size](https://img.shields.io/badge/exe-%7E21_KB-2ea043?style=flat-square)
 ![admin](https://img.shields.io/badge/admin-not_required-d29922?style=flat-square)
 
-> **你每月给 OpenAI 打 $20，买到的却是：重连五次、429 转圈、overloaded 降智、502 坏网关、断流腰斩、"stream closed before response.completed"。**
+> **你每月给 OpenAI 打 $200，买到的却是：重连五次、429 转圈、overloaded 降智、502 坏网关、断流腰斩、"stream closed before response.completed"。**
 >
 > 钱付了，货没到。不是你账号的问题，是通往上游那条路烂了。
 

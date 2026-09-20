@@ -16,7 +16,7 @@
 ![size](https://img.shields.io/badge/exe-%7E21_KB-2ea043?style=flat-square)
 ![admin](https://img.shields.io/badge/admin-not_required-d29922?style=flat-square)
 
-> **You pay OpenAI $20 a month. What you get: reconnect ×5, 429 purgatory, "overloaded" lobotomy, 502 Bad Gateway, streams severed mid-sentence, "stream closed before response.completed".**
+> **You pay OpenAI $200 a month. What you get: reconnect ×5, 429 purgatory, "overloaded" lobotomy, 502 Bad Gateway, streams severed mid-sentence, "stream closed before response.completed".**
 >
 > Paid in full, goods never delivered. It's not your account; the road upstream is rotten.
 
