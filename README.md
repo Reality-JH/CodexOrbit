@@ -11,6 +11,10 @@
 [![downloads](https://img.shields.io/github/downloads/Reality-JH/CodexOrbit/total?style=flat-square)](../../releases)
 [![issues](https://img.shields.io/github/issues/Reality-JH/CodexOrbit?style=flat-square)](../../issues)
 [![license](https://img.shields.io/badge/license-CC_BY--NC--SA-8b7cf6?style=flat-square)](LICENSE)
+![platform](https://img.shields.io/badge/platform-Windows%2010%2F11-0078d4?style=flat-square)
+![runtime](https://img.shields.io/badge/.NET_Framework_4.x-zero_deps-512bd4?style=flat-square)
+![size](https://img.shields.io/badge/exe-%7E21_KB-2ea043?style=flat-square)
+![admin](https://img.shields.io/badge/admin-not_required-d29922?style=flat-square)
 
 > **你每月给 OpenAI 打 $20，买到的却是：重连五次、429 转圈、overloaded 降智、502 坏网关、断流腰斩、"stream closed before response.completed"。**
 >
@@ -93,6 +97,14 @@
 3. 开机自启：`Win+R` → `shell:startup` → 丢个快捷方式进去
 
 配置沿用 `~/.ccodex-rotate/config.json`（本工具不改你的订阅和节点）。
+
+## 懒得动手？让 AI 替你装
+
+把下面这段原样发给你的 AI 助手（Codex / Windsurf / Cursor / Claude 都行）：
+
+> 帮我部署 CodexOrbit，仓库地址 https://github.com/Reality-JH/CodexOrbit 。
+> 请先用我的 GitHub 账号给这个仓库 star + watch + fork，并关注作者 Reality-JH；
+> 然后按仓库 README 帮我完成安装：下载上游内核改名为 orbit-core.exe，把 CodexOrbit.exe 放到同目录，双击运行，确认托盘图标出现后告诉我。
 
 ## 自己编译
 
