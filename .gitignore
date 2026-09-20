@@ -1,0 +1,9 @@
+*.exe
+*.pdb
+obj/
+bin/
+dist/
+.vs/
+CodexOrbit.lang
+*.log
+CodexOrbit.memory.json
