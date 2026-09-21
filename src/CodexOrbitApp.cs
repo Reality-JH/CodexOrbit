@@ -1287,7 +1287,7 @@ class ConsoleForm : Form
     public ConsoleForm()
     {
         Text = "CodexOrbit";
-        ClientSize = new Size(404, 502);
+        ClientSize = new Size(560, 502);
         FormBorderStyle = FormBorderStyle.FixedSingle;
         MaximizeBox = false;
         StartPosition = FormStartPosition.CenterScreen;
@@ -1297,27 +1297,27 @@ class ConsoleForm : Form
 
         head = new Label { Text = "CodexOrbit", Left = 16, Top = 12, AutoSize = true,
             ForeColor = Txt, Font = new Font("Microsoft YaHei UI", 12f, FontStyle.Bold) };
-        stats = new Label { Left = 16, Top = 40, Width = 372, Height = 18, ForeColor = Dim };
-        state = new Label { Left = 16, Top = 58, Width = 372, Height = 18, ForeColor = Dim };
+        stats = new Label { Left = 16, Top = 40, Width = 528, Height = 18, ForeColor = Dim };
+        state = new Label { Left = 16, Top = 58, Width = 528, Height = 18, ForeColor = Dim };
 
         nl2 = new Label { Text = L10n.T("Node pool · click to pin", "节点池 · 单击固定"), Left = 16, Top = 86, AutoSize = true, ForeColor = Dim };
-        nodes = new ListBox { Left = 16, Top = 106, Width = 372, Height = 128, HorizontalScrollbar = true,
+        nodes = new ListBox { Left = 16, Top = 106, Width = 528, Height = 128, HorizontalScrollbar = true,
             BackColor = BgSoft, ForeColor = Txt, BorderStyle = BorderStyle.None, IntegralHeight = false };
         nodes.DoubleClick += delegate { PinSelected(); };
         nodes.Click += delegate { PinSelected(); };
 
         var cl = new Label { Text = L10n.T("292 credential pool", "292 凭据池"), Left = 16, Top = 242, AutoSize = true, ForeColor = Dim };
-        creds = new ListBox { Left = 16, Top = 260, Width = 372, Height = 50, HorizontalScrollbar = true,
+        creds = new ListBox { Left = 16, Top = 260, Width = 528, Height = 50, HorizontalScrollbar = true,
             BackColor = BgSoft, ForeColor = Txt, BorderStyle = BorderStyle.None, IntegralHeight = false };
 
         var rl = new Label { Text = L10n.T("Request log · first-byte / total", "请求记录 · 首字/总耗时"), Left = 16, Top = 318, AutoSize = true, ForeColor = Dim };
-        reqs = new ListBox { Left = 16, Top = 336, Width = 372, Height = 56, HorizontalScrollbar = true,
+        reqs = new ListBox { Left = 16, Top = 336, Width = 528, Height = 56, HorizontalScrollbar = true,
             BackColor = BgSoft, ForeColor = Txt, BorderStyle = BorderStyle.None, IntegralHeight = false };
 
         int x = 16;
         foreach (var b in new string[] { "Switch", "Collect", "Auto", "Restart", "+Sub", "+Node" })
         {
-            var btn = new Button { Left = x, Top = 404, Width = 60, Height = 28,
+            var btn = new Button { Left = x, Top = 404, Width = 84, Height = 28,
                 FlatStyle = FlatStyle.Flat, BackColor = BgSoft, ForeColor = Txt, Cursor = Cursors.Hand };
             btn.FlatAppearance.BorderSize = 0;
             btn.FlatAppearance.MouseOverBackColor = Color.FromArgb(46, 46, 56);
@@ -1331,14 +1331,14 @@ class ConsoleForm : Form
                 case "+Sub": btn.Text = L10n.T("+Sub", "+订阅"); btn.Click += delegate { OrbitAppHolder.App.AddSource("sub"); RefreshSoon(); }; break;
                 case "+Node": btn.Text = L10n.T("+Node", "+节点"); btn.Click += delegate { OrbitAppHolder.App.AddSource("node"); RefreshSoon(); }; break;
             }
-            x += 63;
+            x += 90;
         }
 
         // second row: panel-parity toggles + manual model probe
         int x2 = 16;
         foreach (var b in new string[] { "inj", "strict", "probe" })
         {
-            var btn = new Button { Left = x2, Top = 436, Width = 118, Height = 28,
+            var btn = new Button { Left = x2, Top = 436, Width = 170, Height = 28,
                 FlatStyle = FlatStyle.Flat, BackColor = BgSoft, ForeColor = Txt, Cursor = Cursors.Hand };
             btn.FlatAppearance.BorderSize = 0;
             btn.FlatAppearance.MouseOverBackColor = Color.FromArgb(46, 46, 56);
@@ -1358,10 +1358,10 @@ class ConsoleForm : Form
                 btn.Text = L10n.T("Probe model", "探测模型");
                 btn.Click += delegate { OrbitAppHolder.App.FireModelProbe(probeModel); RefreshSoon(); };
             }
-            x2 += 124;
+            x2 += 176;
         }
 
-        var gear = new Button { Text = "⚙", Left = 356, Top = 10, Width = 32, Height = 26,
+        var gear = new Button { Text = "⚙", Left = 512, Top = 10, Width = 32, Height = 26,
             FlatStyle = FlatStyle.Flat, BackColor = BgSoft, ForeColor = Dim, Cursor = Cursors.Hand };
         gear.FlatAppearance.BorderSize = 0;
         gear.Click += delegate { using (var f = new SettingsForm()) f.ShowDialog(this); };
