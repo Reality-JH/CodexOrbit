@@ -1130,40 +1130,45 @@ class StatusCard : Form
         Activate();
     }
 
+    static void SetText(Label l, string t) { if (l.Text != t) l.Text = t; }
+
     public void RefreshData(StatusSnapshot s)
     {
         if (s == null)
         {
-            if (IsHandleCreated) BeginInvoke(new MethodInvoker(delegate { if (Visible) { nodeLbl.Text = L10n.T("offline", "离线"); dot.State = Bad; } }));
+            if (IsHandleCreated) BeginInvoke(new MethodInvoker(delegate { if (Visible) { SetText(nodeLbl, L10n.T("offline", "离线")); dot.State = Bad; dot.Invalidate(); } }));
             return;
         }
         if (InvokeRequired) { BeginInvoke(new MethodInvoker(delegate { RefreshData(s); })); return; }
         last = s;
-        nodeLbl.Text = string.IsNullOrEmpty(s.Node) ? L10n.T("(no node)", "(无节点)")
+        SetText(nodeLbl, string.IsNullOrEmpty(s.Node) ? L10n.T("(no node)", "(无节点)")
             : s.Node == "AUTO" ? L10n.T("AUTO · auto-routing", "AUTO · 自动选路")
-            : StripFlags(s.Node) + L10n.T(" · pinned", " · 已固定");
+            : StripFlags(s.Node) + L10n.T(" · pinned", " · 已固定"));
         long total = s.Ok + s.Errors;
         string rate = total > 0 ? Math.Round(100.0 * s.Ok / total) + "%" : "—";
-        statsLbl.Text = string.Format(L10n.T("{0} ok · {1} err · {2} · last {3}s", "{0} 成功 · {1} 失败 · {2} · 上次 {3}s"),
+        string statLine = string.Format(L10n.T("{0} ok · {1} err · {2} · last {3}s", "{0} 成功 · {1} 失败 · {2} · 上次 {3}s"),
             s.Ok, s.Errors, rate, Math.Round(s.LastMillis / 1000.0, 1));
         if (s.FailStreak >= 3)
-            statsLbl.Text += L10n.T("  ⚠ failing ×" + s.FailStreak, "  ⚠ 连失败 ×" + s.FailStreak);
+            statLine += L10n.T("  ⚠ failing ×" + s.FailStreak, "  ⚠ 连失败 ×" + s.FailStreak);
         if (s.WantModel != "")
-            statsLbl.Text += string.Format(L10n.T("  ⚠ downgraded: {0}", "  ⚠ 降级:{0}"), s.GotModel);
+            statLine += string.Format(L10n.T("  ⚠ downgraded: {0}", "  ⚠ 降级:{0}"), s.GotModel);
+        SetText(statsLbl, statLine);
         string next = s.NextCollect.Length >= 16 ? s.NextCollect.Substring(11, 5) : "—";
         string pool = s.Collecting
             ? L10n.T("collecting", "采集中") + (s.CollectTotal > 0 ? " " + s.CollectTried + "/" + s.CollectTotal : "")
             : s.LastCollectOk ? L10n.T("ok", "正常") : L10n.T("pending", "待采");
-        stateLbl.Text = string.Format(L10n.T("292 pool: {0} · {1} stored · next {2}", "292 池: {0} · 在库 {1} 条 · 下次 {2}"),
-            pool, s.States.Count, next);
-        dot.State = !s.Alive ? Bad : (s.Collecting ? Warn : Good);
-        dot.Invalidate();
+        SetText(stateLbl, string.Format(L10n.T("292 pool: {0} · {1} stored · next {2}", "292 池: {0} · 在库 {1} 条 · 下次 {2}"),
+            pool, s.States.Count, next));
+        var ds = !s.Alive ? Bad : (s.Collecting ? Warn : Good);
+        if (dot.State != ds) { dot.State = ds; dot.Invalidate(); }
         spark.Points = s.LatencyHistory;
         spark.Invalidate();
         btnAuto.Enabled = s.Node != "AUTO";
         bool warn = s.FailStreak >= 3;
-        btnAuto.BackColor = warn && s.Node != "AUTO" ? Accent : BgSoft;
-        btnSwitch.BackColor = warn && s.Node == "AUTO" ? Accent : BgSoft;
+        var ac = warn && s.Node != "AUTO" ? Accent : BgSoft;
+        if (btnAuto.BackColor != ac) btnAuto.BackColor = ac;
+        var sc = warn && s.Node == "AUTO" ? Accent : BgSoft;
+        if (btnSwitch.BackColor != sc) btnSwitch.BackColor = sc;
     }
 
     // GDI+ has no glyphs for regional-indicator flag emoji — drop them.
@@ -1356,7 +1361,25 @@ class ConsoleForm : Form
             else
             {
                 btn.Text = L10n.T("Probe model", "探测模型");
-                btn.Click += delegate { OrbitAppHolder.App.FireModelProbe(probeModel); RefreshSoon(); };
+                btn.Click += delegate
+                {
+                    btn.Enabled = false;
+                    btn.Text = L10n.T("Probing…", "探测中…");
+                    ThreadPool.QueueUserWorkItem(delegate
+                    {
+                        OrbitAppHolder.App.FireModelProbe(probeModel);
+                        try
+                        {
+                            btn.BeginInvoke(new MethodInvoker(delegate
+                            {
+                                btn.Enabled = true;
+                                btn.Text = L10n.T("Probe model", "探测模型");
+                                Reload();
+                            }));
+                        }
+                        catch { }
+                    });
+                };
             }
             x2 += 176;
         }
@@ -1424,6 +1447,32 @@ class ConsoleForm : Form
         });
     }
 
+    // The 4s timer used to clear+refill every list and rewrite every label on
+    // each tick - visible flicker plus lost selections/scroll. Now we only
+    // touch a control when its content actually changed.
+    static void SetText(Label l, string t) { if (l.Text != t) l.Text = t; }
+    static void SetBtn(Button b, string t, Color c)
+    {
+        if (b.Text != t) b.Text = t;
+        if (b.BackColor != c) b.BackColor = c;
+    }
+    static void SyncList(ListBox lb, System.Collections.Generic.List<string> rows)
+    {
+        bool same = lb.Items.Count == rows.Count;
+        for (int i = 0; same && i < rows.Count; i++)
+            if (Convert.ToString(lb.Items[i]) != rows[i]) same = false;
+        if (same) return;
+        int sel = lb.SelectedIndex;
+        bool atBottom = lb.Items.Count == 0
+            || lb.TopIndex >= lb.Items.Count - Math.Max(1, lb.ClientSize.Height / lb.ItemHeight);
+        lb.BeginUpdate();
+        lb.Items.Clear();
+        foreach (var r in rows) lb.Items.Add(r);
+        if (sel >= 0 && sel < lb.Items.Count) lb.SelectedIndex = sel;
+        else if (atBottom && lb.Items.Count > 0) lb.TopIndex = lb.Items.Count - 1;
+        lb.EndUpdate();
+    }
+
     internal void ApplyData(StatusSnapshot s, string nodesJson)
     {
         bool warn = s != null && s.FailStreak >= 3;
@@ -1434,39 +1483,38 @@ class ConsoleForm : Form
             curInj = s.InjectOn; curStrict = s.StrictOn;
             if (s.WantModel != "") probeModel = s.WantModel;
             if (injBtn != null)
-            {
-                injBtn.Text = L10n.T("292 inject: ", "292 注入：") + (curInj ? L10n.T("on", "开") : L10n.T("off", "关"));
-                injBtn.BackColor = curInj ? BgSoft : Color.FromArgb(70, 52, 52);
-            }
+                SetBtn(injBtn,
+                    L10n.T("292 inject: ", "292 注入：") + (curInj ? L10n.T("on", "开") : L10n.T("off", "关")),
+                    curInj ? BgSoft : Color.FromArgb(70, 52, 52));
             if (strictBtn != null)
-            {
-                strictBtn.Text = L10n.T("Anti-downgrade: ", "防降智：") + (curStrict ? L10n.T("on", "开") : L10n.T("off", "关"));
-                strictBtn.BackColor = curStrict && s.WantModel != "" ? Accent : (curStrict ? BgSoft : Color.FromArgb(70, 52, 52));
-            }
+                SetBtn(strictBtn,
+                    L10n.T("Anti-downgrade: ", "防降智：") + (curStrict ? L10n.T("on", "开") : L10n.T("off", "关")),
+                    curStrict && s.WantModel != "" ? Accent : (curStrict ? BgSoft : Color.FromArgb(70, 52, 52)));
         }
         if (s != null)
         {
             long total = s.Ok + s.Errors;
             string rate = total > 0 ? Math.Round(100.0 * s.Ok / total) + "%" : "—";
-            head.Text = s.Node == "AUTO" ? "CodexOrbit  ·  " + L10n.T("auto-routing", "自动选路")
+            SetText(head, s.Node == "AUTO" ? "CodexOrbit  ·  " + L10n.T("auto-routing", "自动选路")
                 : string.IsNullOrEmpty(s.Node) ? "CodexOrbit"
-                : "CodexOrbit  ·  " + StatusCard.StripFlagsText(s.Node) + L10n.T(" (pinned)", "（已固定）");
-            stats.Text = string.Format(L10n.T("{0} ok · {1} err · {2} · last {3}s", "{0} 成功 · {1} 失败 · {2} · 上次 {3}s"),
+                : "CodexOrbit  ·  " + StatusCard.StripFlagsText(s.Node) + L10n.T(" (pinned)", "（已固定）"));
+            string statLine = string.Format(L10n.T("{0} ok · {1} err · {2} · last {3}s", "{0} 成功 · {1} 失败 · {2} · 上次 {3}s"),
                 s.Ok, s.Errors, rate, Math.Round(s.LastMillis / 1000.0, 1));
-            if (warn) stats.Text += s.Node == "AUTO" ? L10n.T("  ⚠ failing - hit Switch", "  ⚠ 连失败 · 点「切换」") : L10n.T("  ⚠ failing - hit Auto", "  ⚠ 连失败 · 点「自动」");
+            if (warn) statLine += s.Node == "AUTO" ? L10n.T("  ⚠ failing - hit Switch", "  ⚠ 连失败 · 点「切换」") : L10n.T("  ⚠ failing - hit Auto", "  ⚠ 连失败 · 点「自动」");
             if (s.WantModel != "")
-                stats.Text += string.Format(L10n.T("  ⚠ asked {0}, served {1}", "  ⚠ 求 {0} 实得 {1}"), s.WantModel, s.GotModel);
+                statLine += string.Format(L10n.T("  ⚠ asked {0}, served {1}", "  ⚠ 求 {0} 实得 {1}"), s.WantModel, s.GotModel);
+            SetText(stats, statLine);
             string next = s.NextCollect.Length >= 16 ? s.NextCollect.Substring(11, 5) : "—";
             string pool = s.Collecting
                 ? L10n.T("collecting", "采集中") + (s.CollectTotal > 0 ? " " + s.CollectTried + "/" + s.CollectTotal : "")
                 : s.LastCollectOk ? L10n.T("ok", "正常") : L10n.T("pending", "待采");
-            state.Text = string.Format(L10n.T(
+            SetText(state, string.Format(L10n.T(
                 "292 pool: {0} · {1} stored · next {2}",
                 "292 池: {0} · 在库 {1} 条 · 下次 {2}"),
-                pool, s.States.Count, next);
-            creds.Items.Clear();
+                pool, s.States.Count, next));
+            var crow = new System.Collections.Generic.List<string>();
             if (s.States.Count == 0)
-                creds.Items.Add(s.Collecting
+                crow.Add(s.Collecting
                     ? L10n.T("(collecting now - it'll fill itself)", "（采集中 · 稍候自动补上）")
                     : L10n.T("(none yet - auto-collect is scheduled; or press Collect)", "（暂无 · 到点自动采 · 或点「采集」立即补）"));
             foreach (var sd in s.States)
@@ -1474,10 +1522,11 @@ class ConsoleForm : Form
                 object mv, lv, nv, hv;
                 sd.TryGetValue("model", out mv); sd.TryGetValue("length", out lv);
                 sd.TryGetValue("node", out nv); sd.TryGetValue("hits", out hv);
-                creds.Items.Add(string.Format("{0} · {1} · ×{2} · {3}", mv, lv, hv, StatusCard.StripFlagsText(Convert.ToString(nv))));
+                crow.Add(string.Format("{0} · {1} · ×{2} · {3}", mv, lv, hv, StatusCard.StripFlagsText(Convert.ToString(nv))));
             }
-            reqs.Items.Clear();
-            if (s.Recent.Count == 0) reqs.Items.Add(L10n.T("(no requests yet)", "（还没有请求）"));
+            SyncList(creds, crow);
+            var rrow = new System.Collections.Generic.List<string>();
+            if (s.Recent.Count == 0) rrow.Add(L10n.T("(no requests yet)", "（还没有请求）"));
             foreach (var it in s.Recent)
             {
                 var r = it as System.Collections.Generic.Dictionary<string, object>;
@@ -1505,17 +1554,16 @@ class ConsoleForm : Form
                 else if (rmv != "") row += " · " + rmv;
                 else if (smv != "") row += " · " + smv;
                 object nd; if (r.TryGetValue("node", out nd)) row += " · " + StatusCard.StripFlagsText(Convert.ToString(nd));
-                reqs.Items.Add(row);
+                rrow.Add(row);
             }
+            SyncList(reqs, rrow);
         }
         else
         {
-            head.Text = "CodexOrbit  ·  " + L10n.T("offline", "离线");
-            stats.Text = state.Text = "";
-            reqs.Items.Clear();
+            SetText(head, "CodexOrbit  ·  " + L10n.T("offline", "离线"));
+            SetText(stats, ""); SetText(state, "");
+            SyncList(reqs, new System.Collections.Generic.List<string>());
         }
-        nodes.Items.Clear();
-        nodeRaw = null;
         if (nodesJson == null) return;
         try
         {
@@ -1523,9 +1571,10 @@ class ConsoleForm : Form
             string current = j.ContainsKey("current") ? Convert.ToString(j["current"]) : "";
             var arr = j.ContainsKey("nodes") ? j["nodes"] as System.Collections.ArrayList : null;
             if (arr == null) return;
-            if (arr.Count == 0) nodes.Items.Add(L10n.T("(empty - add a subscription with +Sub)", "（空 · 先点 +订阅 添加订阅链接）"));
+            var nrow = new System.Collections.Generic.List<string>();
+            if (arr.Count == 0) nrow.Add(L10n.T("(empty - add a subscription with +Sub)", "（空 · 先点 +订阅 添加订阅链接）"));
             if (s != null && s.Node == "AUTO" && current != "" && current != "AUTO")
-                head.Text = "CodexOrbit  ·  " + L10n.T("auto", "自动") + " · " + StatusCard.StripFlagsText(current);
+                SetText(head, "CodexOrbit  ·  " + L10n.T("auto", "自动") + " · " + StatusCard.StripFlagsText(current));
             nodeRaw = arr;
             int okCount = 0;
             foreach (var it in arr)
@@ -1537,15 +1586,16 @@ class ConsoleForm : Form
                 if (stt == "ok") okCount++;
                 object tpv, dvv; d.TryGetValue("type", out tpv); d.TryGetValue("delay", out dvv);
                 long delay = 0; long.TryParse(Convert.ToString(dvv), out delay);
-                nodes.Items.Add(string.Format("{0} {1}   {2}   {3}",
+                nrow.Add(string.Format("{0} {1}   {2}   {3}",
                     name == current ? "✓" : stt == "ok" ? "●" : "○",
                     StatusCard.StripFlagsText(name), tpv,
                     delay > 0 ? delay + "ms" : ""));
             }
-            nl2.Text = string.Format(L10n.T(
+            SyncList(nodes, nrow);
+            SetText(nl2, string.Format(L10n.T(
                 "Node pool · click to pin · {0}/{1} healthy · {2} upstream-ready",
                 "节点池 · 单击固定 · 健康 {0}/{1} · 可达上游 {2}"),
-                okCount, arr.Count, s != null ? s.Reachable : 0);
+                okCount, arr.Count, s != null ? s.Reachable : 0));
         }
         catch { }
     }
