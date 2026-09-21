@@ -109,7 +109,8 @@ Zero console windows, zero browser tabs. Runs silent in the tray. **It ships its
 | Restart continuity | Empty pool + remembered credential triggers auto-collect; a remembered pin restores itself |
 | Pool watchdog | Empty 292 pool while the engine is idle -> the tray nudges a collect every 150s; the Collect button is just an accelerator |
 | Local log | `CodexOrbit.log` records startup, spawns, outages, node hops, pool changes, manual actions; open it from the tray menu |
-| Request log | Console streams every request: status, **TTFT / total time**, serving node, retries, 292-injection flag |
+| Request log | Console streams every request: status, **TTFT / total time**, serving node, retries, 292-injection flag, **actually-served model** (flagged when it differs from requested) |
+| Anti-downgrade | When upstream silently swaps models (ask `gpt-6-astra`, get `gpt-5.6-luna`), the request is **refused** (422) instead of serving a dumbed-down answer; set `"strict_model": false` in `config.json` to relax |
 
 ## How it works
 
