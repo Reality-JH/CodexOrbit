@@ -13,8 +13,30 @@
 [![license](https://img.shields.io/badge/license-CC_BY--NC--SA-8b7cf6?style=flat-square)](LICENSE)
 ![platform](https://img.shields.io/badge/platform-Windows%2010%2F11-0078d4?style=flat-square)
 ![runtime](https://img.shields.io/badge/.NET_Framework_4.x-zero_deps-512bd4?style=flat-square)
-![size](https://img.shields.io/badge/exe-%7E21_KB-2ea043?style=flat-square)
+![size](https://img.shields.io/badge/exe-%7E58_KB-2ea043?style=flat-square)
 ![admin](https://img.shields.io/badge/admin-not_required-d29922?style=flat-square)
+
+## Contents
+
+- [What it does](#what-it-does)
+- [Feature overview](#feature-overview)
+- [How it works](#how-it-works)
+- [Console and menu](#console-and-menu)
+- [Files and data](#files-and-data)
+- [FAQ](#faq)
+- [Changelog](#changelog)
+- [Security and privacy](#security-and-privacy)
+- [Why the disconnects fade](#why-the-disconnects-fade)
+- [Every error you've seen, translated](#every-error-youve-seen-translated)
+- [It's not just you](#its-not-just-you)
+- [Install](#install)
+- [Too lazy? Let your AI install it](#too-lazy-let-your-ai-install-it)
+- [Build it yourself](#build-it-yourself)
+- [How it talks to ccodex-rotate](#how-it-talks-to-ccodex-rotate)
+- [For contributors](#for-contributors)
+- [Honest limits](#honest-limits)
+- [Community](#community)
+
 
 > **You pay OpenAI $200 a month. What you get: reconnect ×5, 429 purgatory, "overloaded" lobotomy, 502 Bad Gateway, streams severed mid-sentence, "stream closed before response.completed".**
 >
@@ -46,6 +68,116 @@ Zero console windows, zero browser tabs. Runs silent in the tray. **It ships its
 - **Self-launching**: spins up `orbit-core serve` hidden on start; if the process dies it's back within 4 seconds
 - **Icon tells the truth**: violet = healthy · amber = error spike · red = offline · grey = starting
 - **Clean exit**: quit = stop service + kill orphan kernels + `restore` your `config.toml`. No dangling pointer to a dead proxy
+
+## Feature overview
+
+### Nodes and routing
+
+| Feature | What it does |
+|---|---|
+| Health patrol | The engine probes every node every 45s; dead nodes cool down before a request can hit them |
+| One-click pin | Pin from the tray menu or by clicking a node in the console; measured latency shown in the list |
+| Auto routing | `Restore auto` unpins and hands selection back to url-test; greyed out while already auto |
+| Switch node | In auto mode, force-rotates to the next healthy node; every hop is logged |
+| Upstream-ready flag | The node pool separates "healthy" from "verified upstream-reachable" - connecting is not the same as sustaining a stream |
+
+### 292 credential pool
+
+| Feature | What it does |
+|---|---|
+| Auto collection | Missing state auto-collects; after a success it re-collects on a 30-minute cycle |
+| Failure retry | A failed collect retries automatically after 5 minutes |
+| Credential injection | Collected `X-Codex-Turn-State` is injected into requests; `inject_node_affinity` binds it to the producing node |
+| Pool visibility | Console and status card show stored count, collecting flag, and next scheduled collect |
+| Values never shown | Credential values never appear in the UI or logs - only model, hit count, and source node |
+
+### Supervision and self-healing
+
+| Feature | What it does |
+|---|---|
+| Service spawn | Launches `orbit-core serve` hidden on start - no black windows ever |
+| 4-second self-heal | If the engine dies, the patrol kills orphan mihomo processes and relaunches |
+| Crash recovery | If the tray itself exits, the logon autostart shortcut revives the whole stack |
+| Clean exit | Quit = stop service + kill orphan kernels + `restore` your `config.toml` |
+
+### Memory and log
+
+| Feature | What it does |
+|---|---|
+| Persistent memory | `CodexOrbit.memory.json` records the pinned node and the last good 292's model and source node |
+| Restart continuity | Empty pool + remembered credential triggers auto-collect; a remembered pin restores itself |
+| Local log | `CodexOrbit.log` records startup, spawns, outages, node hops, pool changes, manual actions; open it from the tray menu |
+
+## How it works
+
+```text
++----------+   HTTP    +-------------+   local API :17850   +-------------+
+| tray app | --------> | orbit-core  | <-----------------> | CodexOrbit  |
+| (card/   |  poll 4s  | (router     |                     |  console    |
+|  menu)   | <-------- |  engine)    |                     |             |
++----------+           +------+------+                     +-------------+
+                              | embeds
+                       +------+------+    node pool (vless/ss/trojan/hysteria2/tuic)
+                       |   mihomo    | --------------> upstream https://chatgpt.com
+                       |  mixed:17890|
+                       |  ctrl :17891|
+                       +-------------+
+```
+
+- The tray only speaks **loopback HTTP** - it never touches node config directly; every node action goes through an `/api/*` endpoint.
+- The 292 pool is a **credential metric** (stored count, collect schedule); the node pool is a **routing metric** (healthy count, upstream-reachable count). They mean different things and are shown separately.
+- `Auto` only restores url-test routing; collection runs on its own scheduler - 30 minutes after success, 5 minutes after failure.
+
+## Console and menu
+
+The console's six buttons:
+
+| Button | Behavior |
+|---|---|
+| Switch | In auto mode, force-rotate to the next healthy node |
+| Collect | Trigger one 292 collect now (runs in background, doesn't wait for the schedule) |
+| Auto | Unpin and restore url-test; greyed out while already auto |
+| Restart | Restart the orbit-core service (orphan mihomo is cleaned first) |
+| +Sub / +Node | Paste a subscription link or a `vless:// ss:// trojan:// hysteria2:// tuic://` share link |
+
+Beyond the buttons, the tray menu offers: pin node (with measured latency), 292 credential pool detail (model · hits · source node), add source, clear all sources, language switch, open log, and exit-and-restore.
+
+## Files and data
+
+| Path | Contents |
+|---|---|
+| next to `CodexOrbit.exe` | `orbit-core.exe` (the upstream engine, renamed by you) |
+| `~/.ccodex-rotate/config.json` | Subscription, node, and collect-schedule config (untouched by this tool) |
+| `~/.ccodex-rotate/mihomo/` | mihomo runtime directory |
+| `CodexOrbit.memory.json` | Persistent memory: pinned node, last good 292 model and source node |
+| `CodexOrbit.log` | Local event log, auto-truncated past 1MB |
+
+## FAQ
+
+**Does "Auto" trigger a collect?** No. `Auto` only calls `/api/reset` - it unpins and restores url-test routing. Collection is its own scheduler: collect on missing state, renew 30 minutes after success, retry 5 minutes after failure, expire after 1 hour unused.
+
+**What happens on a crash?** Three layers: orbit-core dies -> orphan mihomo is cleaned and it's relaunched within ~4s; the tray itself dies -> the service keeps running and the logon autostart shortcut revives the tray; the machine reboots -> everything starts at login.
+
+**Does the 292 pool rotate on a schedule?** Yes. Success interval 1800s, failure retry 300s, states expire after 3600s unused; `auto_collect` also tops up whenever a request lacks state, without waiting for the schedule.
+
+**Does it need admin?** No. No registry writes, no service install, no system-proxy changes.
+
+**Which node protocols are supported?** Subscription links, plus `vless://` `ss://` `trojan://` `hysteria2://` `tuic://` share links.
+
+**What happens to my Codex config on exit?** "Exit · restore Codex" stops the service, kills orphan kernels, and runs `restore` on your `config.toml` - no dangling pointer to a dead proxy.
+
+## Changelog
+
+### v1.0.0
+
+First public release: native console, separated 292/node pools, persistent memory, local log, crash self-heal, node pinning and auto-routing, bilingual UI.
+
+## Security and privacy
+
+- All traffic between the tray and the engine is `127.0.0.1` loopback; no telemetry, no external reporting.
+- 292 credential values **never appear** in the UI or the log - only model, hit count, and source node.
+- No registry writes, no service install, no system-proxy changes; no admin required.
+- Subscription and node config stays in `~/.ccodex-rotate/config.json`, which this tool never rewrites.
 
 ## Why the disconnects fade
 
@@ -94,7 +226,7 @@ More evidence (mid-stream disconnects, throttling analysis, the `retry_429` sour
 
 ## Install
 
-**Compatibility**: Windows 10 / 11 (probably Win8+ too), runs on the .NET Framework 4.x that ships with Windows, **zero runtime installs**; ARM64 Windows works via built-in emulation; no admin needed. Single ~21KB exe with its own orbit icon.
+**Compatibility**: Windows 10 / 11 (probably Win8+ too), runs on the .NET Framework 4.x that ships with Windows, **zero runtime installs**; ARM64 Windows works via built-in emulation; no admin needed. Single ~58KB exe with its own orbit icon.
 
 1. Rename the upstream engine `ccodex-rotate.exe` to `orbit-core.exe`, then drop `CodexOrbit.exe` next to it
 2. Double-click. No admin, no taskbar footprint
@@ -122,7 +254,7 @@ Nothing to install; Windows ships .NET Framework:
 build.cmd
 ```
 
-Produces a ~20KB `CodexOrbit.exe`, zero third-party deps, single-file source at `src/CodexOrbitApp.cs`, audit away.
+Produces a ~58KB `CodexOrbit.exe`, zero third-party deps, single-file source at `src/CodexOrbitApp.cs`, audit away.
 
 ## How it talks to ccodex-rotate
 
@@ -137,6 +269,8 @@ Local HTTP API (`http://127.0.0.1:17850`):
 | Collect 292 | `POST /api/collect` |
 | Reset to auto | `POST /api/reset` |
 | Add subscription/node | `POST /api/sources/add` |
+| Clear all sources | `POST /api/sources/clear` |
+| Health probe | `GET /healthz` |
 
 ## For contributors
 
@@ -147,6 +281,14 @@ Local HTTP API (`http://127.0.0.1:17850`):
 ## Honest limits
 
 It meaningfully improves connection quality, but it **doesn't add quota and can't promise a 100% cure**: upstream 401/403/429s still happen and still need waiting out. What it does do: stop one rotten node from ruining a session you paid for.
+
+## Community
+
+Questions or ideas? Join the group: **QQ 758423201**
+
+<p align="center">
+  <img src="docs/qq-group.jpg" width="240" alt="QQ group QR code">
+</p>
 
 ## License
 
