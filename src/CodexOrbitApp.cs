@@ -129,7 +129,7 @@ class OrbitApp : ApplicationContext
             {
                 deadWarned = true;
                 Balloon(L10n.T("orbit-core.exe missing", "缺少 orbit-core.exe"),
-                    L10n.T("Place the renamed engine next to CodexOrbit.exe - see README install step 1", "把上游内核改名为 orbit-core.exe 放到本程序旁边 - 见 README 安装第 1 步"));
+                    L10n.T("Re-extract the full release zip - orbit-core.exe must sit next to CodexOrbit.exe", "发布包没解压全 - orbit-core.exe 要和 CodexOrbit.exe 放在一起"));
             }
             return;
         }
