@@ -156,8 +156,6 @@ build.cmd
   <img src="docs/qq-group.jpg" width="240" alt="QQ 群二维码">
 </p>
 
-本项目首发于 [LINUX DO](https://linux.do) 社区，感谢佬友们的反馈与支持。
-
 ## License
 
 仅限个人非商用 · 详见 [LICENSE](LICENSE)
