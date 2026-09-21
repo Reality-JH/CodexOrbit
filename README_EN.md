@@ -98,6 +98,7 @@ Zero console windows, zero browser tabs. Runs silent in the tray. **It ships its
 | Service spawn | Launches `orbit-core serve` hidden on start - no black windows ever |
 | 4-second self-heal | If the engine dies, the patrol kills orphan mihomo processes and relaunches |
 | Crash recovery | If the tray itself exits, the logon autostart shortcut revives the whole stack |
+| Failure guidance | 3 failed requests in a row (403/429/5xx) -> one-click balloon fix: restore auto if pinned, switch node if auto; console and status card highlight the right button |
 | Clean exit | Quit = stop service + kill orphan kernels + `restore` your `config.toml` |
 
 ### Memory and log
@@ -175,6 +176,7 @@ Beyond the buttons, the tray menu offers: pin node (with measured latency), 292 
 
 - New console **request log**: per-request status, TTFT/total time, serving node, retries, 292-injection flag (TTFT needs the bundled new orbit-core)
 - Release zip now bundles orbit-core - unpack and run, no more hunting for the engine
+- Failure streaks proactively guide you: balloon offers a one-click fix, console/status card highlight the right button
 - Balloon guidance on missing/failed engine; empty pools show next-step hints; exit asks for confirmation
 
 ### v1.0.0

@@ -87,6 +87,8 @@ class OrbitApp : ApplicationContext
     Process child;
     volatile bool alive;
     volatile int errSpike;
+    volatile bool spikeNotified;
+    DateTime spikeFixUntil = DateTime.MinValue;
     string tip = "CodexOrbit";
 
     public OrbitApp(bool preview)
@@ -111,7 +113,11 @@ class OrbitApp : ApplicationContext
             else if (e.Button == MouseButtons.Right) ShowMenu();
         };
         tray.MouseDoubleClick += delegate { ShowConsole(); };
-        tray.BalloonTipClicked += delegate { ShowCard(); }; // click bubble → card, never browser
+        tray.BalloonTipClicked += delegate
+        {
+            if (DateTime.Now < spikeFixUntil) { spikeFixUntil = DateTime.MinValue; ApplySpikeFix(); }
+            else ShowCard(); // click bubble → card, never browser
+        };
 
         poller = new System.Threading.Timer(delegate { Poll(); }, null, 1200, 4000);
     }
@@ -283,11 +289,13 @@ class OrbitApp : ApplicationContext
         add.DropDownItems.Add(new ToolStripSeparator()); add.DropDownItems.Add(clr);
         menu.Items.Add(add);
 
-        AddMenu(L10n.T("Switch node", "切换节点"), delegate { Post("/api/rotate"); });
+        bool streak = lastStatus != null && lastStatus.FailStreak >= 3;
+        bool isAuto = lastStatus != null && lastStatus.Node == "AUTO";
+        AddMenu(L10n.T("Switch node", "切换节点") + (streak && isAuto ? L10n.T("  ⚠ failing", "  ⚠ 连续失败") : ""), delegate { Post("/api/rotate"); });
         AddMenu(L10n.T("Collect 292 now", "立即采集 292"), delegate { Post("/api/collect"); Balloon(L10n.T("Collecting 292", "正在采集 292"), L10n.T("runs in background", "后台执行中…")); });
-        var autoItem = AddMenu(L10n.T("Auto select", "恢复自动"), delegate { Post("/api/reset"); mem.ForgetPin(); MarkAuto(); Log.Write("pin", "cleared -> auto"); });
+        var autoItem = AddMenu(L10n.T("Auto select", "恢复自动") + (streak && !isAuto ? L10n.T("  ⚠ failing", "  ⚠ 连续失败") : ""), delegate { Post("/api/reset"); mem.ForgetPin(); MarkAuto(); Log.Write("pin", "cleared -> auto"); });
         // already on AUTO — nothing to reset to
-        if (lastStatus != null && lastStatus.Node == "AUTO") autoItem.Enabled = false;
+        if (isAuto) autoItem.Enabled = false;
         menu.Items.Add(new ToolStripSeparator());
         AddMenu(L10n.T("Restart service", "重启服务"), delegate { Balloon(L10n.T("Restarting", "正在重启"), L10n.T("service restarts in background", "服务后台重启中…")); Log.Write("action", "restart"); ThreadPool.QueueUserWorkItem(delegate { RestartService(); }); });
 
@@ -463,6 +471,19 @@ class OrbitApp : ApplicationContext
 
     internal void MarkAuto() { if (lastStatus != null) lastStatus.Node = "AUTO"; }
 
+    void ApplySpikeFix()
+    {
+        var s = lastStatus;
+        bool auto = s != null && s.Node == "AUTO";
+        string path = auto ? "/api/rotate" : "/api/reset";
+        Log.Write("guide", "user accepted -> " + path);
+        ThreadPool.QueueUserWorkItem(delegate { Http.Post(BaseUrl + path); });
+        if (!auto) { mem.ForgetPin(); MarkAuto(); }
+        Balloon(L10n.T("Done", "已处理"),
+            auto ? L10n.T("Switching to the next healthy node", "正在切换到下一个健康节点")
+                 : L10n.T("Auto-routing restored", "已恢复自动选路"));
+    }
+
     void Poll()
     {
         if (Interlocked.Exchange(ref pollBusy, 1) != 0) return; // overlap guard
@@ -474,7 +495,7 @@ class OrbitApp : ApplicationContext
         var snap = StatusSnapshot.Fetch();
         lastStatus = snap;
         alive = snap != null && snap.Alive;
-        errSpike = snap != null && snap.Errors > 0 && snap.Errors > snap.Ok ? 1 : 0;
+        errSpike = snap != null && snap.FailStreak >= 3 ? 1 : 0;
 
         var state = !alive ? IconState.Dead : (errSpike > 0 ? IconState.Warn : IconState.Ok);
         string node = snap != null ? snap.Node : "";
@@ -495,6 +516,21 @@ class OrbitApp : ApplicationContext
                 }
             }
         }
+        // requests failing in a row? push a one-click fix to the user instead of
+        // waiting for them to notice - pinned gets "restore auto", AUTO gets "switch"
+        int streak = snap != null ? snap.FailStreak : 0;
+        if (streak >= 3 && !spikeNotified)
+        {
+            spikeNotified = true;
+            spikeFixUntil = DateTime.Now.AddSeconds(45);
+            Log.Write("guide", streak + " consecutive failures - prompting " + (snap.Node == "AUTO" ? "switch" : "auto"));
+            Balloon(L10n.T("Codex requests failing ×" + streak, "Codex 请求连续失败 ×" + streak),
+                snap.Node == "AUTO"
+                    ? L10n.T("Click to switch to the next healthy node", "点我切换到下一个健康节点")
+                    : L10n.T("Click to restore auto-routing (recommended)", "点我恢复自动选路（推荐）"));
+        }
+        if (streak == 0) spikeNotified = false;
+
         prevAliveInit = true; prevAlive = alive; if (node != "") prevNode = node;
 
         if (snap != null)
@@ -686,6 +722,7 @@ class StatusSnapshot
     public bool Collecting, LastCollectOk, AuthReady;
     public string NextCollect = "";
     public long LastMillis;
+    public int FailStreak;
 
     public long[] LatencyHistory = new long[0];
     public System.Collections.ArrayList Recent = new System.Collections.ArrayList();
@@ -726,6 +763,15 @@ class StatusSnapshot
                     hist.Reverse(); // oldest -> newest
                     o.LatencyHistory = hist.ToArray();
                     if (hist.Count > 0) o.LastMillis = hist[hist.Count - 1];
+                }
+                // consecutive failures from the newest record back (node-path failures only:
+                // 403 blocked / 429 rate-limited / 5xx upstream) - 401 is an auth problem, not the node
+                foreach (var it in o.Recent)
+                {
+                    var r = it as System.Collections.Generic.Dictionary<string, object>;
+                    object sv; long st = 0;
+                    if (r != null && r.TryGetValue("status", out sv)) long.TryParse(Convert.ToString(sv), out st);
+                    if (st == 403 || st == 429 || st >= 500) o.FailStreak++; else break;
                 }
             }
             object states;
@@ -925,6 +971,8 @@ class StatusCard : Form
         string rate = total > 0 ? Math.Round(100.0 * s.Ok / total) + "%" : "—";
         statsLbl.Text = string.Format(L10n.T("{0} ok · {1} err · {2} · last {3}s", "{0} 成功 · {1} 失败 · {2} · 上次 {3}s"),
             s.Ok, s.Errors, rate, Math.Round(s.LastMillis / 1000.0, 1));
+        if (s.FailStreak >= 3)
+            statsLbl.Text += L10n.T("  ⚠ failing ×" + s.FailStreak, "  ⚠ 连失败 ×" + s.FailStreak);
         string next = s.NextCollect.Length >= 16 ? s.NextCollect.Substring(11, 5) : "—";
         stateLbl.Text = string.Format(L10n.T("292 pool: {0}{1} · {2} stored · next {3}", "292 池: {0}{1} · 在库 {2} 条 · 下次 {3}"),
             s.LastCollectOk ? L10n.T("ok", "正常") : L10n.T("pending", "待采"), s.Collecting ? L10n.T(" (collecting)", "(采集中)") : "", s.States.Count, next);
@@ -933,6 +981,9 @@ class StatusCard : Form
         spark.Points = s.LatencyHistory;
         spark.Invalidate();
         btnAuto.Enabled = s.Node != "AUTO";
+        bool warn = s.FailStreak >= 3;
+        btnAuto.BackColor = warn && s.Node != "AUTO" ? Accent : BgSoft;
+        btnSwitch.BackColor = warn && s.Node == "AUTO" ? Accent : BgSoft;
     }
 
     // GDI+ has no glyphs for regional-indicator flag emoji — drop them.
@@ -1046,7 +1097,7 @@ class ConsoleForm : Form
 
     Label head, stats, state, nl2;
     ListBox nodes, creds, reqs;
-    Button autoBtn;
+    Button autoBtn, switchBtn;
     System.Collections.ArrayList nodeRaw;
 
     public ConsoleForm()
@@ -1089,7 +1140,7 @@ class ConsoleForm : Form
             Controls.Add(btn);
             switch (b)
             {
-                case "Switch": btn.Text = L10n.T("Switch", "切换"); btn.Click += delegate { Act("/api/rotate"); }; break;
+                case "Switch": btn.Text = L10n.T("Switch", "切换"); switchBtn = btn; btn.Click += delegate { Act("/api/rotate"); }; break;
                 case "Collect": btn.Text = L10n.T("Collect", "采集"); btn.Click += delegate { Act("/api/collect"); OrbitAppHolder.App.Balloon(L10n.T("Collecting 292", "正在采集 292"), ""); }; break;
                 case "Auto": btn.Text = L10n.T("Auto", "自动"); autoBtn = btn; btn.Click += delegate { Act("/api/reset"); OrbitAppHolder.App.mem.ForgetPin(); OrbitAppHolder.App.MarkAuto(); Log.Write("pin", "cleared -> auto"); }; break;
                 case "Restart": btn.Text = L10n.T("Restart", "重启"); btn.Click += delegate { OrbitAppHolder.App.Balloon(L10n.T("Restarting", "正在重启"), ""); Log.Write("action", "restart"); OrbitAppHolder.App.RestartBg(); Close(); }; break;
@@ -1139,7 +1190,9 @@ class ConsoleForm : Form
 
     void ApplyData(StatusSnapshot s, string nodesJson)
     {
-        if (autoBtn != null) autoBtn.Enabled = s == null || s.Node != "AUTO";
+        bool warn = s != null && s.FailStreak >= 3;
+        if (autoBtn != null) { autoBtn.Enabled = s == null || s.Node != "AUTO"; autoBtn.BackColor = warn && s.Node != "AUTO" ? Accent : BgSoft; }
+        if (switchBtn != null) switchBtn.BackColor = warn && s.Node == "AUTO" ? Accent : BgSoft;
         if (s != null)
         {
             long total = s.Ok + s.Errors;
@@ -1149,6 +1202,7 @@ class ConsoleForm : Form
                 : "CodexOrbit  ·  " + StatusCard.StripFlagsText(s.Node) + L10n.T(" (pinned)", "（已固定）");
             stats.Text = string.Format(L10n.T("{0} ok · {1} err · {2} · last {3}s", "{0} 成功 · {1} 失败 · {2} · 上次 {3}s"),
                 s.Ok, s.Errors, rate, Math.Round(s.LastMillis / 1000.0, 1));
+            if (warn) stats.Text += s.Node == "AUTO" ? L10n.T("  ⚠ failing - hit Switch", "  ⚠ 连失败 · 点「切换」") : L10n.T("  ⚠ failing - hit Auto", "  ⚠ 连失败 · 点「自动」");
             string next = s.NextCollect.Length >= 16 ? s.NextCollect.Substring(11, 5) : "—";
             state.Text = string.Format(L10n.T(
                 "292 pool: {0}{1} · {2} stored · next {3}",
