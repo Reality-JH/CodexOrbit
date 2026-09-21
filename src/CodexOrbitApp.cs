@@ -275,7 +275,9 @@ class OrbitApp : ApplicationContext
                     mv, lv, hv, StatusCard.StripFlagsText(Convert.ToString(nv)))) { Enabled = false });
             }
         }
-        else cred.DropDownItems.Add(new ToolStripMenuItem(L10n.T("(none collected)", "（尚未采到）")) { Enabled = false });
+        else cred.DropDownItems.Add(new ToolStripMenuItem(lastStatus != null && lastStatus.Collecting
+            ? L10n.T("(collecting - hold on)", "（采集中 · 稍候）")
+            : L10n.T("(none - auto-collect is scheduled)", "（暂无 · 到点自动采）")) { Enabled = false });
         menu.Items.Add(cred);
 
         var add = new ToolStripMenuItem(L10n.T("Add source", "添加来源"));
@@ -1211,7 +1213,10 @@ class ConsoleForm : Form
                 s.Collecting ? L10n.T(" (collecting)", "(采集中)") : "",
                 s.States.Count, next);
             creds.Items.Clear();
-            if (s.States.Count == 0) creds.Items.Add(L10n.T("(none - press Collect)", "（尚未采到 · 点「采集」补一条）"));
+            if (s.States.Count == 0)
+                creds.Items.Add(s.Collecting
+                    ? L10n.T("(collecting now - it'll fill itself)", "（采集中 · 稍候自动补上）")
+                    : L10n.T("(none yet - auto-collect is scheduled; or press Collect)", "（暂无 · 到点自动采 · 或点「采集」立即补）"));
             foreach (var sd in s.States)
             {
                 object mv, lv, nv, hv;
