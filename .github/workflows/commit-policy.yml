@@ -1,0 +1,38 @@
+name: commit-policy
+
+# Owner-only repository policy: every pushed commit must be authored and
+# committed by the repository owner, with no co-author trailers.
+on:
+  push:
+    branches: [master]
+    tags: ['**']
+
+permissions:
+  contents: read
+
+jobs:
+  verify-commit-identity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Author and committer must be the owner
+        run: |
+          expected='Reality-JH <59652916+Reality-JH@users.noreply.github.com>'
+          bad=$(git log --format='%an <%ae> | %cn <%ce>' HEAD | sort -u \
+                | grep -vxF "$expected | $expected" || true)
+          if [ -n "$bad" ]; then
+            echo "Commits with unexpected identity:"
+            echo "$bad"
+            exit 1
+          fi
+
+      - name: No co-author trailers in commit messages
+        run: |
+          if git log --format=%B HEAD | grep -iqE '^\s*co-authored-by:'; then
+            echo "Co-authored-by trailers are not allowed in this repository."
+            git log --format='%H %s' HEAD | head -20
+            exit 1
+          fi
