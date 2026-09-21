@@ -107,6 +107,7 @@ Zero console windows, zero browser tabs. Runs silent in the tray. **It ships its
 | Persistent memory | `CodexOrbit.memory.json` records the pinned node and the last good 292's model and source node |
 | Restart continuity | Empty pool + remembered credential triggers auto-collect; a remembered pin restores itself |
 | Local log | `CodexOrbit.log` records startup, spawns, outages, node hops, pool changes, manual actions; open it from the tray menu |
+| Request log | Console streams every request: status, **TTFT / total time**, serving node, retries, 292-injection flag |
 
 ## How it works
 
@@ -140,7 +141,9 @@ The console's six buttons:
 | Restart | Restart the orbit-core service (orphan mihomo is cleaned first) |
 | +Sub / +Node | Paste a subscription link or a `vless:// ss:// trojan:// hysteria2:// tuic://` share link |
 
-Beyond the buttons, the tray menu offers: pin node (with measured latency), 292 credential pool detail (model · hits · source node), add source, clear all sources, language switch, open log, and exit-and-restore.
+The console shows three live lists: node pool (click to pin), 292 credential pool (model · length · hits · source), and the request log (time · method · path · status · TTFT/total · retries · injection · node), refreshing every 4 seconds.
+
+Beyond the buttons, the tray menu offers: pin node (with measured latency), 292 credential pool detail (model · hits · source node), add source, clear all sources, language switch, open log, and exit-and-restore (with a confirmation prompt).
 
 ## Files and data
 
@@ -167,6 +170,12 @@ Beyond the buttons, the tray menu offers: pin node (with measured latency), 292 
 **What happens to my Codex config on exit?** "Exit · restore Codex" stops the service, kills orphan kernels, and runs `restore` on your `config.toml` - no dangling pointer to a dead proxy.
 
 ## Changelog
+
+### v1.1.0
+
+- New console **request log**: per-request status, TTFT/total time, serving node, retries, 292-injection flag (TTFT needs the bundled new orbit-core)
+- Release zip now bundles orbit-core - unpack and run, no more hunting for the engine
+- Balloon guidance on missing/failed engine; empty pools show next-step hints; exit asks for confirmation
 
 ### v1.0.0
 
@@ -233,9 +242,11 @@ More evidence (mid-stream disconnects, throttling analysis, the `retry_429` sour
 
 **Compatibility**: Windows 10 / 11 (probably Win8+ too), runs on the .NET Framework 4.x that ships with Windows, **zero runtime installs**; ARM64 Windows works via built-in emulation; no admin needed. The release zip is unpack-and-run (tray ~58KB + engine ~9.6MB) with its own orbit icon.
 
-1. Grab [`CodexOrbit-v1.0.0-windows-x64.zip`](../../releases) from the release and extract it anywhere
+1. Grab `CodexOrbit-*-windows-x64.zip` from the [latest release](../../releases/latest) and extract it anywhere
 2. Double-click `CodexOrbit.exe` (`orbit-core.exe` ships in the zip — just keep the two files together)
 3. Autostart: `Win+R` → `shell:startup` → drop a `CodexOrbit.exe` shortcut in
+
+> `orbit-core.exe` is built by us from upstream ccodex-rotate source with our own TTFT (time-to-first-byte) patch — source and patch are public at [Reality-JH/ccodex-rotate](https://github.com/Reality-JH/ccodex-rotate), so you can reproduce the build yourself.
 
 It reads `~/.ccodex-rotate/config.json` as-is (your subscription and nodes are untouched).
 

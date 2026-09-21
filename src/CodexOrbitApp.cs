@@ -688,6 +688,7 @@ class StatusSnapshot
     public long LastMillis;
 
     public long[] LatencyHistory = new long[0];
+    public System.Collections.ArrayList Recent = new System.Collections.ArrayList();
     public System.Collections.Generic.List<System.Collections.Generic.Dictionary<string, object>> States =
         new System.Collections.Generic.List<System.Collections.Generic.Dictionary<string, object>>();
 
@@ -716,7 +717,9 @@ class StatusSnapshot
                     foreach (var it in arr)
                     {
                         var r = it as System.Collections.Generic.Dictionary<string, object>;
-                        if (r != null && r.ContainsKey("millis"))
+                        if (r == null) continue;
+                        o.Recent.Add(r);
+                        if (r.ContainsKey("millis"))
                             hist.Add(Convert.ToInt64(r["millis"]));
                         if (hist.Count >= 24) break;
                     }
@@ -1042,7 +1045,7 @@ class ConsoleForm : Form
     static readonly Color Accent = Color.FromArgb(139, 124, 246);
 
     Label head, stats, state, nl2;
-    ListBox nodes, creds;
+    ListBox nodes, creds, reqs;
     Button autoBtn;
     System.Collections.ArrayList nodeRaw;
 
@@ -1063,13 +1066,17 @@ class ConsoleForm : Form
         state = new Label { Left = 16, Top = 58, Width = 372, Height = 18, ForeColor = Dim };
 
         nl2 = new Label { Text = L10n.T("Node pool · click to pin", "节点池 · 单击固定"), Left = 16, Top = 86, AutoSize = true, ForeColor = Dim };
-        nodes = new ListBox { Left = 16, Top = 106, Width = 372, Height = 190,
+        nodes = new ListBox { Left = 16, Top = 106, Width = 372, Height = 128,
             BackColor = BgSoft, ForeColor = Txt, BorderStyle = BorderStyle.None, IntegralHeight = false };
         nodes.DoubleClick += delegate { PinSelected(); };
         nodes.Click += delegate { PinSelected(); };
 
-        var cl = new Label { Text = L10n.T("292 credential pool", "292 凭据池"), Left = 16, Top = 306, AutoSize = true, ForeColor = Dim };
-        creds = new ListBox { Left = 16, Top = 324, Width = 372, Height = 66,
+        var cl = new Label { Text = L10n.T("292 credential pool", "292 凭据池"), Left = 16, Top = 242, AutoSize = true, ForeColor = Dim };
+        creds = new ListBox { Left = 16, Top = 260, Width = 372, Height = 50,
+            BackColor = BgSoft, ForeColor = Txt, BorderStyle = BorderStyle.None, IntegralHeight = false };
+
+        var rl = new Label { Text = L10n.T("Request log · first-byte / total", "请求记录 · 首字/总耗时"), Left = 16, Top = 318, AutoSize = true, ForeColor = Dim };
+        reqs = new ListBox { Left = 16, Top = 336, Width = 372, Height = 56, HorizontalScrollbar = true,
             BackColor = BgSoft, ForeColor = Txt, BorderStyle = BorderStyle.None, IntegralHeight = false };
 
         int x = 16;
@@ -1095,7 +1102,7 @@ class ConsoleForm : Form
         var hint = new Label { Text = L10n.T("Close = back to tray", "关闭 = 回到托盘"), Left = 16, Top = 444, AutoSize = true, ForeColor = Dim,
             Font = new Font("Microsoft YaHei UI", 8f) };
 
-        Controls.AddRange(new Control[] { head, stats, state, nl2, nodes, cl, creds, hint });
+        Controls.AddRange(new Control[] { head, stats, state, nl2, nodes, cl, creds, rl, reqs, hint });
     }
 
     protected override void OnShown(EventArgs e) { base.OnShown(e); Reload(); }
@@ -1158,11 +1165,37 @@ class ConsoleForm : Form
                 sd.TryGetValue("node", out nv); sd.TryGetValue("hits", out hv);
                 creds.Items.Add(string.Format("{0} · {1} · ×{2} · {3}", mv, lv, hv, StatusCard.StripFlagsText(Convert.ToString(nv))));
             }
+            reqs.Items.Clear();
+            if (s.Recent.Count == 0) reqs.Items.Add(L10n.T("(no requests yet)", "（还没有请求）"));
+            foreach (var it in s.Recent)
+            {
+                var r = it as System.Collections.Generic.Dictionary<string, object>;
+                if (r == null) continue;
+                string tm = Convert.ToString(r["time"]);
+                tm = tm != null && tm.Length >= 19 ? tm.Substring(11, 8) : "--:--:--";
+                string path = Convert.ToString(r["path"]);
+                int slash = path == null ? -1 : path.LastIndexOf('/');
+                if (slash >= 0) path = path.Substring(slash + 1);
+                long ms = 0, tt = 0; int att = 1;
+                object tmp;
+                if (r.TryGetValue("millis", out tmp)) long.TryParse(Convert.ToString(tmp), out ms);
+                if (r.TryGetValue("ttft", out tmp)) long.TryParse(Convert.ToString(tmp), out tt);
+                if (r.TryGetValue("attempts", out tmp)) int.TryParse(Convert.ToString(tmp), out att);
+                string dur = ms >= 1000 ? Math.Round(ms / 1000.0, 1) + "s" : ms + "ms";
+                string row = string.Format("{0} {1} {2} · {3}", tm, r["method"], path, r["status"]);
+                if (tt > 0) row += string.Format(L10n.T(" · first {0}", " · 首字 {0}"), tt >= 1000 ? Math.Round(tt / 1000.0, 1) + "s" : tt + "ms");
+                row += string.Format(L10n.T(" · total {0}", " · 总 {0}"), dur);
+                if (att > 1) row += " ×" + att;
+                object inj; if (r.TryGetValue("injected", out inj) && Convert.ToString(inj) == "True") row += " ·292";
+                object nd; if (r.TryGetValue("node", out nd)) row += " · " + StatusCard.StripFlagsText(Convert.ToString(nd));
+                reqs.Items.Add(row);
+            }
         }
         else
         {
             head.Text = "CodexOrbit  ·  " + L10n.T("offline", "离线");
             stats.Text = state.Text = "";
+            reqs.Items.Clear();
         }
         nodes.Items.Clear();
         nodeRaw = null;
