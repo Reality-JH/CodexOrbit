@@ -733,6 +733,7 @@ class StatusSnapshot
     public string Node = "";
     public long Ok, Errors, Alive2, Reachable;
     public bool Collecting, LastCollectOk, AuthReady;
+    public long CollectTried, CollectTotal;
     public string NextCollect = "";
     public long LastMillis;
     public int FailStreak;
@@ -755,6 +756,7 @@ class StatusSnapshot
             o.Ok = L(j, "ok"); o.Errors = L(j, "errors");
             o.Alive2 = L(j, "alive"); o.Reachable = L(j, "reachable");
             o.Collecting = B(j, "collecting"); o.LastCollectOk = B(j, "last_collect_ok");
+            o.CollectTried = L(j, "collect_tried"); o.CollectTotal = L(j, "collect_total");
             o.AuthReady = B(j, "auth_ready");
             o.NextCollect = S(j, "next_collect");
             object recent;
@@ -987,8 +989,11 @@ class StatusCard : Form
         if (s.FailStreak >= 3)
             statsLbl.Text += L10n.T("  ⚠ failing ×" + s.FailStreak, "  ⚠ 连失败 ×" + s.FailStreak);
         string next = s.NextCollect.Length >= 16 ? s.NextCollect.Substring(11, 5) : "—";
-        stateLbl.Text = string.Format(L10n.T("292 pool: {0}{1} · {2} stored · next {3}", "292 池: {0}{1} · 在库 {2} 条 · 下次 {3}"),
-            s.LastCollectOk ? L10n.T("ok", "正常") : L10n.T("pending", "待采"), s.Collecting ? L10n.T(" (collecting)", "(采集中)") : "", s.States.Count, next);
+        string pool = s.Collecting
+            ? L10n.T("collecting", "采集中") + (s.CollectTotal > 0 ? " " + s.CollectTried + "/" + s.CollectTotal : "")
+            : s.LastCollectOk ? L10n.T("ok", "正常") : L10n.T("pending", "待采");
+        stateLbl.Text = string.Format(L10n.T("292 pool: {0} · {1} stored · next {2}", "292 池: {0} · 在库 {1} 条 · 下次 {2}"),
+            pool, s.States.Count, next);
         dot.State = !s.Alive ? Bad : (s.Collecting ? Warn : Good);
         dot.Invalidate();
         spark.Points = s.LatencyHistory;
@@ -1130,13 +1135,13 @@ class ConsoleForm : Form
         state = new Label { Left = 16, Top = 58, Width = 372, Height = 18, ForeColor = Dim };
 
         nl2 = new Label { Text = L10n.T("Node pool · click to pin", "节点池 · 单击固定"), Left = 16, Top = 86, AutoSize = true, ForeColor = Dim };
-        nodes = new ListBox { Left = 16, Top = 106, Width = 372, Height = 128,
+        nodes = new ListBox { Left = 16, Top = 106, Width = 372, Height = 128, HorizontalScrollbar = true,
             BackColor = BgSoft, ForeColor = Txt, BorderStyle = BorderStyle.None, IntegralHeight = false };
         nodes.DoubleClick += delegate { PinSelected(); };
         nodes.Click += delegate { PinSelected(); };
 
         var cl = new Label { Text = L10n.T("292 credential pool", "292 凭据池"), Left = 16, Top = 242, AutoSize = true, ForeColor = Dim };
-        creds = new ListBox { Left = 16, Top = 260, Width = 372, Height = 50,
+        creds = new ListBox { Left = 16, Top = 260, Width = 372, Height = 50, HorizontalScrollbar = true,
             BackColor = BgSoft, ForeColor = Txt, BorderStyle = BorderStyle.None, IntegralHeight = false };
 
         var rl = new Label { Text = L10n.T("Request log · first-byte / total", "请求记录 · 首字/总耗时"), Left = 16, Top = 318, AutoSize = true, ForeColor = Dim };
@@ -1217,12 +1222,13 @@ class ConsoleForm : Form
                 s.Ok, s.Errors, rate, Math.Round(s.LastMillis / 1000.0, 1));
             if (warn) stats.Text += s.Node == "AUTO" ? L10n.T("  ⚠ failing - hit Switch", "  ⚠ 连失败 · 点「切换」") : L10n.T("  ⚠ failing - hit Auto", "  ⚠ 连失败 · 点「自动」");
             string next = s.NextCollect.Length >= 16 ? s.NextCollect.Substring(11, 5) : "—";
+            string pool = s.Collecting
+                ? L10n.T("collecting", "采集中") + (s.CollectTotal > 0 ? " " + s.CollectTried + "/" + s.CollectTotal : "")
+                : s.LastCollectOk ? L10n.T("ok", "正常") : L10n.T("pending", "待采");
             state.Text = string.Format(L10n.T(
-                "292 pool: {0}{1} · {2} stored · next {3}",
-                "292 池: {0}{1} · 在库 {2} 条 · 下次 {3}"),
-                s.LastCollectOk ? L10n.T("ok", "正常") : L10n.T("pending", "待采"),
-                s.Collecting ? L10n.T(" (collecting)", "(采集中)") : "",
-                s.States.Count, next);
+                "292 pool: {0} · {1} stored · next {2}",
+                "292 池: {0} · 在库 {1} 条 · 下次 {2}"),
+                pool, s.States.Count, next);
             creds.Items.Clear();
             if (s.States.Count == 0)
                 creds.Items.Add(s.Collecting
