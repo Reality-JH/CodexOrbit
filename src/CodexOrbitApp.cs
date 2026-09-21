@@ -116,10 +116,23 @@ class OrbitApp : ApplicationContext
         poller = new System.Threading.Timer(delegate { Poll(); }, null, 1200, 4000);
     }
 
+    bool deadWarned;
+
     void EnsureRunning()
     {
-        if (Http.Get(BaseUrl + "/healthz", 1200) != null) { alive = true; return; }
-        if (!File.Exists(Exe)) { Log.Write("svc", "orbit-core.exe missing"); SetTip(L10n.T("CodexOrbit: orbit-core.exe missing", "CodexOrbit: 缺少 orbit-core.exe"), IconState.Dead); return; }
+        if (Http.Get(BaseUrl + "/healthz", 1200) != null) { alive = true; deadWarned = false; return; }
+        if (!File.Exists(Exe))
+        {
+            Log.Write("svc", "orbit-core.exe missing");
+            SetTip(L10n.T("CodexOrbit: orbit-core.exe missing", "CodexOrbit: 缺少 orbit-core.exe"), IconState.Dead);
+            if (!deadWarned)
+            {
+                deadWarned = true;
+                Balloon(L10n.T("orbit-core.exe missing", "缺少 orbit-core.exe"),
+                    L10n.T("Place the renamed engine next to CodexOrbit.exe - see README install step 1", "把上游内核改名为 orbit-core.exe 放到本程序旁边 - 见 README 安装第 1 步"));
+            }
+            return;
+        }
         // a dead serve leaves its mihomo child holding 17890/17891 — clear it first
         Proc.KillOrphanKernels();
         try
@@ -131,7 +144,16 @@ class OrbitApp : ApplicationContext
             child = Process.Start(psi);
             Log.Write("svc", "spawned orbit-core pid " + child.Id);
         }
-        catch (Exception ex) { Log.Write("svc", "spawn failed: " + ex.Message); SetTip(L10n.T("CodexOrbit: start failed: ", "CodexOrbit: 启动失败: ") + ex.Message, IconState.Dead); }
+        catch (Exception ex)
+        {
+            Log.Write("svc", "spawn failed: " + ex.Message);
+            SetTip(L10n.T("CodexOrbit: start failed: ", "CodexOrbit: 启动失败: ") + ex.Message, IconState.Dead);
+            if (!deadWarned)
+            {
+                deadWarned = true;
+                Balloon(L10n.T("orbit-core failed to start", "orbit-core 启动失败"), ex.Message);
+            }
+        }
     }
 
     void ShowCard()
@@ -208,6 +230,11 @@ class OrbitApp : ApplicationContext
                 string current = j.ContainsKey("current") ? Convert.ToString(j["current"]) : "";
                 var arr = j.ContainsKey("nodes") ? j["nodes"] as System.Collections.ArrayList : null;
                 if (arr == null) return;
+                if (arr.Count == 0)
+                {
+                    SafeAdd(pin, new ToolStripMenuItem(L10n.T("(no nodes - add a source first)", "（无节点 · 先添加订阅）")) { Enabled = false });
+                    return;
+                }
                 foreach (var it in arr)
                 {
                     var d = it as System.Collections.Generic.Dictionary<string, object>;
@@ -275,7 +302,11 @@ class OrbitApp : ApplicationContext
         menu.Items.Add(new ToolStripSeparator());
         AddMenu(L10n.T("Open log", "打开日志"), delegate { try { Process.Start("notepad.exe", Log.LogPath); } catch { } });
         menu.Items.Add(new ToolStripSeparator());
-        AddMenu(L10n.T("Exit & restore Codex", "退出并还原 Codex"), delegate { Quit(); });
+        AddMenu(L10n.T("Exit & restore Codex", "退出并还原 Codex"), delegate
+        {
+            if (MessageBox.Show(L10n.T("Stop the service and restore your Codex config?", "停止服务并还原 Codex 配置？"),
+                "CodexOrbit", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) == DialogResult.Yes) Quit();
+        });
         menu.Show(Cursor.Position);
     }
 
@@ -1119,7 +1150,7 @@ class ConsoleForm : Form
                 s.Collecting ? L10n.T(" (collecting)", "(采集中)") : "",
                 s.States.Count, next);
             creds.Items.Clear();
-            if (s.States.Count == 0) creds.Items.Add(L10n.T("(none collected)", "（尚未采到）"));
+            if (s.States.Count == 0) creds.Items.Add(L10n.T("(none - press Collect)", "（尚未采到 · 点「采集」补一条）"));
             foreach (var sd in s.States)
             {
                 object mv, lv, nv, hv;
@@ -1142,6 +1173,7 @@ class ConsoleForm : Form
             string current = j.ContainsKey("current") ? Convert.ToString(j["current"]) : "";
             var arr = j.ContainsKey("nodes") ? j["nodes"] as System.Collections.ArrayList : null;
             if (arr == null) return;
+            if (arr.Count == 0) nodes.Items.Add(L10n.T("(empty - add a subscription with +Sub)", "（空 · 先点 +订阅 添加订阅链接）"));
             if (s != null && s.Node == "AUTO" && current != "" && current != "AUTO")
                 head.Text = "CodexOrbit  ·  " + L10n.T("auto", "自动") + " · " + StatusCard.StripFlagsText(current);
             nodeRaw = arr;

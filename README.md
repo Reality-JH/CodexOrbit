@@ -13,7 +13,7 @@
 [![license](https://img.shields.io/badge/license-CC_BY--NC--SA-8b7cf6?style=flat-square)](LICENSE)
 ![platform](https://img.shields.io/badge/platform-Windows%2010%2F11-0078d4?style=flat-square)
 ![runtime](https://img.shields.io/badge/.NET_Framework_4.x-zero_deps-512bd4?style=flat-square)
-![size](https://img.shields.io/badge/exe-%7E21_KB-2ea043?style=flat-square)
+![size](https://img.shields.io/badge/exe-%7E58_KB-2ea043?style=flat-square)
 ![admin](https://img.shields.io/badge/admin-not_required-d29922?style=flat-square)
 
 ## 目录
@@ -225,7 +225,13 @@
 
 ## 安装
 
-**兼容性**：Windows 10 / 11（理论 Win8+ 也行），只用系统自带 .NET Framework 4.x，**不装任何运行时**；ARM64 Windows 走内置仿真可跑；不需要管理员权限。单文件 exe ~21KB，自带轨道图标。
+**开始前你需要**：
+
+- `orbit-core.exe`：上游路由引擎（ccodex-rotate 的 Windows 构建），**本仓库不附带**，需自备并改成这个名字
+- 至少一个节点来源：订阅链接，或 `vless:// ss:// trojan://` 等分享链接——进托盘「添加来源」或控制台 `+订阅`/`+节点` 加入
+- 首次运行若弹 SmartScreen「已保护你的电脑」：点「更多信息」→「仍要运行」（未签名新应用都会这样）；托盘图标可能藏在任务栏「^」溢出区，拖出来即可
+
+**兼容性**：Windows 10 / 11（理论 Win8+ 也行），只用系统自带 .NET Framework 4.x，**不装任何运行时**；ARM64 Windows 走内置仿真可跑；不需要管理员权限。单文件 exe ~58KB，自带轨道图标。
 
 1. 把上游内核 `ccodex-rotate.exe` 改名为 `orbit-core.exe`，再把 `CodexOrbit.exe` 放到它旁边
 2. 双击运行，不需要管理员权限，不占任务栏

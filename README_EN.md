@@ -226,6 +226,12 @@ More evidence (mid-stream disconnects, throttling analysis, the `retry_429` sour
 
 ## Install
 
+**Before you start, you'll need**:
+
+- `orbit-core.exe`: the upstream routing engine (the Windows build of ccodex-rotate) — **not bundled**, grab it yourself and rename it
+- At least one node source: a subscription URL, or `vless:// ss:// trojan://` share links — add via tray "Add source" or the console `+Sub`/`+Node`
+- If SmartScreen says "Windows protected your PC" on first run: click "More info" → "Run anyway" (normal for unsigned apps); the tray icon may hide in the "^" overflow area — drag it out
+
 **Compatibility**: Windows 10 / 11 (probably Win8+ too), runs on the .NET Framework 4.x that ships with Windows, **zero runtime installs**; ARM64 Windows works via built-in emulation; no admin needed. Single ~58KB exe with its own orbit icon.
 
 1. Rename the upstream engine `ccodex-rotate.exe` to `orbit-core.exe`, then drop `CodexOrbit.exe` next to it
