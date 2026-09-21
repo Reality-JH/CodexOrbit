@@ -479,8 +479,9 @@ class OrbitApp : ApplicationContext
         var s = lastStatus;
         bool auto = s != null && s.Node == "AUTO";
         string path = auto ? "/api/rotate" : "/api/reset";
-        Log.Write("guide", "user accepted -> " + path);
+        Log.Write("guide", "user accepted -> " + path + " + collect");
         ThreadPool.QueueUserWorkItem(delegate { Http.Post(BaseUrl + path); });
+        ThreadPool.QueueUserWorkItem(delegate { Http.Post(BaseUrl + "/api/collect"); }); // refresh the credential too
         if (!auto) { mem.ForgetPin(); MarkAuto(); }
         Balloon(L10n.T("Done", "已处理"),
             auto ? L10n.T("Switching to the next healthy node", "正在切换到下一个健康节点")
@@ -533,6 +534,15 @@ class OrbitApp : ApplicationContext
                     : L10n.T("Click to restore auto-routing (recommended)", "点我恢复自动选路（推荐）"));
         }
         if (streak == 0) spikeNotified = false;
+        // the failing credential can be the culprit, not just the node -
+        // refresh the 292 too instead of waiting out its TTL
+        if (streak >= 3 && snap.States.Count > 0 && !snap.Collecting &&
+            (DateTime.Now - lastCollectNudge).TotalSeconds >= 150)
+        {
+            lastCollectNudge = DateTime.Now;
+            Log.Write("guide", "fail streak - refreshing 292 too");
+            ThreadPool.QueueUserWorkItem(delegate { Http.Post(BaseUrl + "/api/collect"); });
+        }
 
         prevAliveInit = true; prevAlive = alive; if (node != "") prevNode = node;
 

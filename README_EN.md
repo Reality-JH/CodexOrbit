@@ -98,7 +98,7 @@ Zero console windows, zero browser tabs. Runs silent in the tray. **It ships its
 | Service spawn | Launches `orbit-core serve` hidden on start - no black windows ever |
 | 4-second self-heal | If the engine dies, the patrol kills orphan mihomo processes and relaunches |
 | Crash recovery | If the tray itself exits, the logon autostart shortcut revives the whole stack |
-| Failure guidance | 3 failed requests in a row (403/429/5xx) -> one-click balloon fix: restore auto if pinned, switch node if auto; console and status card highlight the right button |
+| Failure guidance | 3 failed requests in a row (403/429/5xx) -> one-click balloon fix: switch node AND re-collect the 292; console and status card highlight the right button |
 | Clean exit | Quit = stop service + kill orphan kernels + `restore` your `config.toml` |
 
 ### Memory and log
