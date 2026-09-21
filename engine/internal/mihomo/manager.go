@@ -16,9 +16,9 @@ import (
 	"sync"
 	"time"
 
-	"ccodex-rotate/internal/config"
-	"ccodex-rotate/internal/nodes"
-	"ccodex-rotate/internal/subscription"
+	"orbit-core/internal/config"
+	"orbit-core/internal/nodes"
+	"orbit-core/internal/subscription"
 )
 
 // Proxy mirrors the subset of mihomo's /proxies payload we care about.
@@ -107,7 +107,7 @@ func FindBinary(cfg config.Config) (string, error) {
 	dataDir := config.DataDir()
 	for _, d := range []string{
 		filepath.Join(dataDir, "mihomo"),
-		filepath.Join(home, ".ccodex-rotate", "mihomo"),
+		filepath.Join(home, ".codexorbit", "mihomo"),
 	} {
 		candidates = append(candidates,
 			filepath.Join(d, "mihomo"), filepath.Join(d, "mihomo.exe"),
@@ -126,7 +126,7 @@ func FindBinary(cfg config.Config) (string, error) {
 			return p, nil
 		}
 	}
-	return "", fmt.Errorf("mihomo binary not found; run `ccodex-rotate fetch-core` to download it, or set mihomo_path in config")
+	return "", fmt.Errorf("mihomo binary not found; run `orbit-core fetch-core` to download it, or set mihomo_path in config")
 }
 
 // windowsCandidates returns common Windows core locations from the environment.

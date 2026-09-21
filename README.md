@@ -32,7 +32,7 @@
 - [安装](#安装)
 - [懒得动手？让 AI 替你装](#懒得动手让-ai-替你装)
 - [自己编译](#自己编译)
-- [它如何和 ccodex-rotate 通信](#它如何和-ccodex-rotate-通信)
+- [它如何和引擎通信](#它如何和引擎通信)
 - [给仓库贡献者](#给仓库贡献者)
 - [诚实边界](#诚实边界)
 - [交流](#交流)
@@ -45,7 +45,7 @@
   <img src="docs/meme-before-after.png" width="680" alt="凌晨三点被 429 淹没 vs 靠回去看轨道环">
 </p>
 
-**CodexOrbit** 是给 [ccodex-rotate](https://github.com/446599/CCODEX-ROTATE) 做的 Windows 托盘伴侣：把好出口找出来钉住、烂节点踢进冷却、`X-Codex-Turn-State` 采到自动注入。**让 Pro 会员花出去的钱，换回 Pro 会员该有的体验。**
+**CodexOrbit** 是 Codex 的 Windows 托盘伴侣：内置 `orbit-core` 路由引擎（源码在 [`engine/`](engine/)），把好出口找出来钉住、烂节点踢进冷却、`X-Codex-Turn-State` 采到自动注入。**让 Pro 会员花出去的钱，换回 Pro 会员该有的体验。**
 
 <p align="center">
   <img src="docs/screenshot.png" width="300" alt="CodexOrbit status card">
@@ -151,9 +151,9 @@
 
 | 路径 | 内容 |
 |---|---|
-| `CodexOrbit.exe` 旁 | `orbit-core.exe`（上游内核，发布包附带） |
-| `~/.ccodex-rotate/config.json` | 订阅、节点、采集调度配置（本工具不改） |
-| `~/.ccodex-rotate/mihomo/` | mihomo 运行时目录 |
+| `CodexOrbit.exe` 旁 | `orbit-core.exe`（内置路由引擎，发布包附带） |
+| `~/.codexorbit/config.json` | 订阅、节点、采集调度配置（本工具不改） |
+| `~/.codexorbit/mihomo/` | mihomo 运行时目录 |
 | `CodexOrbit.memory.json` | 持久记忆：固定节点、最后有效 292 模型与来源节点 |
 | `CodexOrbit.log` | 本地事件日志，超 1MB 自动截半 |
 
@@ -191,7 +191,7 @@
 - 全部通信走 `127.0.0.1` 本地回环；无遥测、无外部上报。
 - 292 凭据值**从不显示**在界面或日志里，只展示模型、命中数、来源节点。
 - 不写注册表、不装系统服务、不改系统代理设置；不需要管理员权限。
-- 订阅与节点配置沿用 `~/.ccodex-rotate/config.json`，本工具不改写它。
+- 订阅与节点配置沿用 `~/.codexorbit/config.json`，本工具不改写它。
 
 ## 为什么断流会少
 
@@ -251,9 +251,9 @@
 2. 双击 `CodexOrbit.exe`（`orbit-core.exe` 已附带，两个文件保持在同一目录即可）
 3. 开机自启：`Win+R` → `shell:startup` → 丢个 `CodexOrbit.exe` 快捷方式进去
 
-> `orbit-core.exe` 由我们基于上游 ccodex-rotate 源码构建，附带自研补丁（TTFT 首字节耗时、严格防降智、会话锁模型等）——全部源码就在本仓库 [`engine/`](engine/) 目录，`go build ./cmd/ccodex-rotate` 即可复现。
+> `orbit-core.exe` 是 CodexOrbit 自带的 Go 路由引擎，全部源码就在本仓库 [`engine/`](engine/) 目录（零第三方依赖），`cd engine && go build ./cmd/orbit-core` 即可自行复现构建。
 
-配置沿用 `~/.ccodex-rotate/config.json`（本工具不改你的订阅和节点）。
+配置沿用 `~/.codexorbit/config.json`（本工具不改你的订阅和节点；老版本数据目录会自动迁移）。
 
 ## 懒得动手？让 AI 替你装
 
@@ -271,11 +271,11 @@
 build.cmd
 ```
 
-产出 ~58KB 的 `CodexOrbit.exe`，零第三方依赖，源码就 `src/CodexOrbitApp.cs` 一个文件，随便审。自编译只产托盘端，引擎仍需从 release zip 或上游获取。
+产出 ~58KB 的 `CodexOrbit.exe`，零第三方依赖，源码就 `src/CodexOrbitApp.cs` 一个文件，随便审。引擎源码在 [`engine/`](engine/)（Go 1.26+，`go build -o orbit-core.exe ./cmd/orbit-core`），也可直接用 release zip 里附带的成品。
 
 **界面语言**跟随系统显示语言自动切换；也可强制：`CodexOrbit.exe --lang=zh` 或 `--lang=en`。
 
-## 它如何和 ccodex-rotate 通信
+## 它如何和引擎通信
 
 本地 HTTP API（`http://127.0.0.1:17850`）：
 

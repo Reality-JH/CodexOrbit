@@ -32,6 +32,10 @@
   "state_ttl_seconds": 3600,
   "state_lengths": [292, 332],
   "inject_node_affinity": false,
+  "strict_model": true,
+  "session_model_lock": true,
+  "probe_interval_seconds": 0,
+  "force_model": "",
   "model_aliases": {},
   "auto_config_codex": true,
   "restore_on_exit": true

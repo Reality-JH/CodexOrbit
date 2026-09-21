@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"ccodex-rotate/internal/config"
+	"orbit-core/internal/config"
 )
 
 func baseCfg() config.Config {

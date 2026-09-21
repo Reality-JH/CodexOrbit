@@ -369,7 +369,7 @@ async function refresh() {
     $("connection").className = "badge bad";
     $("connectionError").hidden = false;
     $("connectionError").textContent =
-      "暂时无法连接本地服务，请确认 ccodex-rotate 正在运行。页面会自动重试；已显示的数据可能过时。";
+      "暂时无法连接本地服务，请确认 orbit-core 正在运行。页面会自动重试；已显示的数据可能过时。";
   } finally {
     refreshing = false;
   }
@@ -473,7 +473,7 @@ document.querySelectorAll("[data-clear]").forEach((button) =>
   }),
 );
 // The tutorial is local to this browser; it does not alter proxy configuration.
-const guideKey = "ccodex-rotate.guide.v1";
+const guideKey = "orbit-core.guide.v1";
 const guideSteps = [
   [
     "添加你的订阅或节点",

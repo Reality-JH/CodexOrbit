@@ -12,8 +12,8 @@ func TestApplySetsKeysAndProvider(t *testing.T) {
 	out := Apply(in, "http://127.0.0.1:17850/backend-api/codex")
 	for _, want := range []string{
 		`openai_base_url = "http://127.0.0.1:17850/backend-api/codex"`,
-		`model_provider = "ccodex-rotate"`,
-		"[model_providers.ccodex-rotate]",
+		`model_provider = "orbit-core"`,
+		"[model_providers.orbit-core]",
 		`model = "gpt-x"`,
 	} {
 		if !strings.Contains(out, want) {
@@ -24,14 +24,14 @@ func TestApplySetsKeysAndProvider(t *testing.T) {
 
 // Existing provider table must be updated, not skipped (bug 1).
 func TestApplyUpdatesExistingProvider(t *testing.T) {
-	in := "[model_providers.ccodex-rotate]\n" +
+	in := "[model_providers.orbit-core]\n" +
 		`base_url = "https://api.openai.com/v1"` + "\n" +
 		"name = \"old\"\n\n[desktop]\nfoo = 1\n"
 	out := Apply(in, "http://127.0.0.1:17850/backend-api/codex")
 	if strings.Contains(out, "api.openai.com") {
 		t.Fatalf("stale base_url was not updated:\n%s", out)
 	}
-	if strings.Count(out, "[model_providers.ccodex-rotate]") != 1 {
+	if strings.Count(out, "[model_providers.orbit-core]") != 1 {
 		t.Fatalf("provider table duplicated:\n%s", out)
 	}
 	if !strings.Contains(out, `base_url = "http://127.0.0.1:17850/backend-api/codex"`) {
@@ -64,7 +64,7 @@ func TestIsWiredChecksProvider(t *testing.T) {
 	}
 
 	// Provider ours but base_url points elsewhere: not wired.
-	os.WriteFile(p, []byte("model_provider = \"ccodex-rotate\"\n[model_providers.ccodex-rotate]\nbase_url = \"https://api.openai.com/v1\"\n"), 0o600)
+	os.WriteFile(p, []byte("model_provider = \"orbit-core\"\n[model_providers.orbit-core]\nbase_url = \"https://api.openai.com/v1\"\n"), 0o600)
 	if IsWired(p, listen) {
 		t.Error("should be false when base_url does not match")
 	}
@@ -96,7 +96,7 @@ func TestRestorePreservesOtherChanges(t *testing.T) {
 	}
 	got, _ := os.ReadFile(cfg)
 	s := string(got)
-	if strings.Contains(s, "ccodex-rotate") {
+	if strings.Contains(s, "orbit-core") {
 		t.Errorf("managed keys/table not reverted:\n%s", s)
 	}
 	if !strings.Contains(s, "foo = 1") {

@@ -5,7 +5,7 @@ import (
 	"net/url"
 	"strings"
 
-	"ccodex-rotate/internal/config"
+	"orbit-core/internal/config"
 )
 
 // provider names are fixed so the manager can address them.

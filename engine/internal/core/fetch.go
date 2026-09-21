@@ -18,7 +18,7 @@ import (
 	"strings"
 	"time"
 
-	"ccodex-rotate/internal/subscription"
+	"orbit-core/internal/subscription"
 )
 
 const apiLatest = "https://api.github.com/repos/MetaCubeX/mihomo/releases/latest"
@@ -75,7 +75,7 @@ func latestAsset(ctx context.Context, hc *http.Client) (string, error) {
 		return "", err
 	}
 	req.Header.Set("Accept", "application/vnd.github+json")
-	req.Header.Set("User-Agent", "ccodex-rotate")
+	req.Header.Set("User-Agent", "orbit-core")
 	resp, err := hc.Do(req)
 	if err != nil {
 		return "", err
@@ -118,7 +118,7 @@ func download(ctx context.Context, hc *http.Client, rawURL string) ([]byte, erro
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("User-Agent", "ccodex-rotate")
+	req.Header.Set("User-Agent", "orbit-core")
 	resp, err := hc.Do(req)
 	if err != nil {
 		return nil, err

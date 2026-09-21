@@ -16,7 +16,7 @@ using System.Web.Script.Serialization;
 [assembly: System.Reflection.AssemblyFileVersion("1.0.0.0")]
 [assembly: System.Reflection.AssemblyCopyright("Reality-JH · non-commercial")]
 
-// CodexOrbit — Windows-native tray console for the orbit-core engine (ccodex-rotate core).
+// CodexOrbit — Windows-native tray console for the orbit-core engine.
 // Runs the serve process windowless, shows a status card on click,
 // and restores the Codex config on exit.
 
@@ -78,8 +78,19 @@ class OrbitApp : ApplicationContext
     internal static readonly string Dir =
         Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location);
     internal static readonly string Exe = Path.Combine(Dir, "orbit-core.exe");
-    internal static readonly string Cfg = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".ccodex-rotate", "config.json");
+    // Config lives in ~/.codexorbit; fall back to the pre-rename legacy dir
+    // so settings stay readable if the engine hasn't migrated it yet.
+    internal static string Cfg
+    {
+        get
+        {
+            var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            var p = Path.Combine(home, ".codexorbit", "config.json");
+            if (File.Exists(p)) return p;
+            var legacy = Path.Combine(home, ".ccodex-rotate", "config.json");
+            return File.Exists(legacy) ? legacy : p;
+        }
+    }
 
     readonly NotifyIcon tray = new NotifyIcon();
     readonly StatusCard card = new StatusCard();
@@ -220,7 +231,7 @@ class OrbitApp : ApplicationContext
             cfgProbeSec = 0;
             try
             {
-                var p = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".ccodex-rotate", "config.json");
+                var p = Cfg;
                 var j = new JavaScriptSerializer().Deserialize<System.Collections.Generic.Dictionary<string, object>>(File.ReadAllText(p));
                 object v; if (j.TryGetValue("probe_interval_seconds", out v)) int.TryParse(Convert.ToString(v), out cfgProbeSec);
             }
@@ -1675,7 +1686,7 @@ static class Shot
 }
 
 // Settings dialog - the useful knobs, point-and-click instead of JSON editing.
-// Writes ~/.ccodex-rotate/config.json (preserving other keys), applies the two
+// Writes ~/.codexorbit/config.json (preserving other keys), applies the two
 // runtime toggles via API, and optionally restarts the engine so the rest bind.
 class SettingsForm : Form
 {
@@ -1693,7 +1704,7 @@ class SettingsForm : Form
 
     public SettingsForm()
     {
-        cfgPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".ccodex-rotate", "config.json");
+        cfgPath = OrbitApp.Cfg;
         cfg = ReadCfg();
         Text = "CodexOrbit · " + L10n.T("Settings", "设置");
         ClientSize = new Size(368, 458);
@@ -1894,7 +1905,7 @@ static class Proc
             foreach (var mo in mos.Get())
             {
                 string cl = Convert.ToString(mo["CommandLine"]);
-                if (cl != null && cl.IndexOf("ccodex-rotate", StringComparison.OrdinalIgnoreCase) >= 0)
+                if (cl != null && cl.IndexOf("codex", StringComparison.OrdinalIgnoreCase) >= 0)
                     try { Process.GetProcessById(Convert.ToInt32(mo["ProcessId"])).Kill(); } catch { }
             }
         }

@@ -1,6 +1,6 @@
 /dist/
 /release/
-/ccodex-rotate
+/orbit-core
 *.exe
 *.test
 *.out

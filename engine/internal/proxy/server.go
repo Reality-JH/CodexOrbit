@@ -18,9 +18,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"ccodex-rotate/internal/config"
-	"ccodex-rotate/internal/modelid"
-	"ccodex-rotate/internal/turnstate"
+	"orbit-core/internal/config"
+	"orbit-core/internal/modelid"
+	"orbit-core/internal/turnstate"
 )
 
 // Egress abstracts the rotating outbound path.
@@ -235,7 +235,7 @@ func (s *Server) Probe(ctx context.Context, client *http.Client, probeModel stri
 		if err != nil {
 			return 0, false, "", err
 		}
-		req.Header.Set("User-Agent", "ccodex-rotate/probe")
+		req.Header.Set("User-Agent", "orbit-core/probe")
 		resp, err := client.Do(req)
 		if err != nil {
 			return 0, false, "", err
@@ -325,7 +325,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if r.URL.Path == "/" || r.URL.Path == "/healthz" {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		fmt.Fprintf(w, "ccodex-rotate ok\nnode: %s\n", s.eg.Current())
+		fmt.Fprintf(w, "orbit-core ok\nnode: %s\n", s.eg.Current())
 		return
 	}
 	if !strings.HasPrefix(r.URL.Path, "/backend-api/codex") {
@@ -559,7 +559,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.logf("fail %s %s: %s", r.Method, r.URL.Path, msg)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	fmt.Fprintf(w, `{"error":{"message":%q,"type":"ccodex_rotate_error"}}`, msg)
+	fmt.Fprintf(w, `{"error":{"message":%q,"type":"orbit_core_error"}}`, msg)
 }
 
 // readBody buffers the request body so it can be replayed on failover.

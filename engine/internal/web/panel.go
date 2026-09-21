@@ -1,4 +1,4 @@
-// Package web serves a minimal status/control panel for ccodex-rotate.
+// Package web serves a minimal status/control panel for orbit-core.
 package web
 
 import (
@@ -9,8 +9,8 @@ import (
 	"net/http"
 	"time"
 
-	"ccodex-rotate/internal/mihomo"
-	"ccodex-rotate/internal/proxy"
+	"orbit-core/internal/mihomo"
+	"orbit-core/internal/proxy"
 )
 
 // Panel ties together the manager, egress and proxy for the UI.

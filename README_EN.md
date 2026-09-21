@@ -32,7 +32,7 @@
 - [Install](#install)
 - [Too lazy? Let your AI install it](#too-lazy-let-your-ai-install-it)
 - [Build it yourself](#build-it-yourself)
-- [How it talks to ccodex-rotate](#how-it-talks-to-ccodex-rotate)
+- [How it talks to the engine](#how-it-talks-to-the-engine)
 - [For contributors](#for-contributors)
 - [Honest limits](#honest-limits)
 - [Community](#community)
@@ -46,7 +46,7 @@
   <img src="docs/meme-before-after.png" width="680" alt="3am drowning in 429s vs leaning back watching the orbit ring">
 </p>
 
-**CodexOrbit** is a Windows tray companion for [ccodex-rotate](https://github.com/446599/CCODEX-ROTATE): it finds healthy exits and pins them, kicks dead nodes into cooldown, auto-collects and injects `X-Codex-Turn-State`. **So your Pro subscription actually feels like Pro.**
+**CodexOrbit** is a Windows tray companion for Codex with a built-in `orbit-core` routing engine (source in [`engine/`](engine/)): it finds healthy exits and pins them, kicks dead nodes into cooldown, auto-collects and injects `X-Codex-Turn-State`. **So your Pro subscription actually feels like Pro.**
 
 <p align="center">
   <img src="docs/screenshot-en.png" width="300" alt="CodexOrbit status card">
@@ -152,9 +152,9 @@ Beyond the buttons, the tray menu offers: pin node (with measured latency), 292 
 
 | Path | Contents |
 |---|---|
-| next to `CodexOrbit.exe` | `orbit-core.exe` (the upstream engine, bundled in the zip) |
-| `~/.ccodex-rotate/config.json` | Subscription, node, and collect-schedule config (untouched by this tool) |
-| `~/.ccodex-rotate/mihomo/` | mihomo runtime directory |
+| next to `CodexOrbit.exe` | `orbit-core.exe` (the bundled routing engine) |
+| `~/.codexorbit/config.json` | Subscription, node, and collect-schedule config (untouched by this tool) |
+| `~/.codexorbit/mihomo/` | mihomo runtime directory |
 | `CodexOrbit.memory.json` | Persistent memory: pinned node, last good 292 model and source node |
 | `CodexOrbit.log` | Local event log, auto-truncated past 1MB |
 
@@ -192,7 +192,7 @@ First public release: native console, separated 292/node pools, persistent memor
 - All traffic between the tray and the engine is `127.0.0.1` loopback; no telemetry, no external reporting.
 - 292 credential values **never appear** in the UI or the log - only model, hit count, and source node.
 - No registry writes, no service install, no system-proxy changes; no admin required.
-- Subscription and node config stays in `~/.ccodex-rotate/config.json`, which this tool never rewrites.
+- Subscription and node config stays in `~/.codexorbit/config.json`, which this tool never rewrites.
 
 ## Why the disconnects fade
 
@@ -252,9 +252,9 @@ More evidence (mid-stream disconnects, throttling analysis, the `retry_429` sour
 2. Double-click `CodexOrbit.exe` (`orbit-core.exe` ships in the zip — just keep the two files together)
 3. Autostart: `Win+R` → `shell:startup` → drop a `CodexOrbit.exe` shortcut in
 
-> `orbit-core.exe` is built by us from upstream ccodex-rotate source with our own patches (TTFT, strict anti-downgrade, session model lock, …) — the full source lives in this repo under [`engine/`](engine/); `go build ./cmd/ccodex-rotate` reproduces it.
+> `orbit-core.exe` is CodexOrbit's own Go routing engine — the full source lives in this repo under [`engine/`](engine/) (zero third-party deps); `cd engine && go build ./cmd/orbit-core` reproduces it.
 
-It reads `~/.ccodex-rotate/config.json` as-is (your subscription and nodes are untouched).
+It reads `~/.codexorbit/config.json` as-is (your subscription and nodes are untouched; legacy data dirs migrate automatically).
 
 ## Too lazy? Let your AI install it
 
@@ -274,9 +274,9 @@ Nothing to install; Windows ships .NET Framework:
 build.cmd
 ```
 
-Produces a ~58KB `CodexOrbit.exe`, zero third-party deps, single-file source at `src/CodexOrbitApp.cs`, audit away. Self-builds only make the tray side — the engine still comes from the release zip or upstream.
+Produces a ~58KB `CodexOrbit.exe`, zero third-party deps, single-file source at `src/CodexOrbitApp.cs`, audit away. Self-builds only make the tray side — the engine source lives in [`engine/`](engine/) (Go 1.26+, `go build -o orbit-core.exe ./cmd/orbit-core`), or just use the binary bundled in the release zip.
 
-## How it talks to ccodex-rotate
+## How it talks to the engine
 
 Local HTTP API (`http://127.0.0.1:17850`):
 

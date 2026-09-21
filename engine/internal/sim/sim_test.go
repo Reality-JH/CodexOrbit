@@ -1,4 +1,4 @@
-// Package sim contains an end-to-end simulation of ccodex-rotate against a mock
+// Package sim contains an end-to-end simulation of orbit-core against a mock
 // upstream and a set of mock proxy nodes (blocked / dead / healthy).
 package sim
 
@@ -12,8 +12,8 @@ import (
 	"sync"
 	"testing"
 
-	"ccodex-rotate/internal/config"
-	"ccodex-rotate/internal/proxy"
+	"orbit-core/internal/config"
+	"orbit-core/internal/proxy"
 )
 
 type node struct {

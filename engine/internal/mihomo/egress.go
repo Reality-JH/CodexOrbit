@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"ccodex-rotate/internal/pool"
+	"orbit-core/internal/pool"
 )
 
 // CollectEvent is one entry in the credential-collection log.
@@ -481,7 +481,7 @@ func (e *Egress) reachabilityProbe(ctx context.Context, client *http.Client, mod
 	if err != nil {
 		return 0, false, "", err
 	}
-	req.Header.Set("User-Agent", "ccodex-rotate/"+versionish)
+	req.Header.Set("User-Agent", "orbit-core/"+versionish)
 	resp, err := client.Do(req)
 	if err != nil {
 		return 0, false, "", err

@@ -1,5 +1,5 @@
 // Package codexcfg patches ~/.codex/config.toml to route Codex through
-// ccodex-rotate, keeping a restorable backup. It edits only the keys it owns so
+// orbit-core, keeping a restorable backup. It edits only the keys it owns so
 // unrelated settings are preserved, and it verifies the real provider rather
 // than guessing from a substring.
 package codexcfg
@@ -12,9 +12,13 @@ import (
 	"strings"
 )
 
-const ProviderName = "ccodex-rotate"
+const ProviderName = "orbit-core"
 
 const providerTable = "model_providers." + ProviderName
+
+// legacyProviderTable is the name older builds wrote; it is removed on Apply
+// so upgrading users don't keep a dead provider section around.
+const legacyProviderTable = "model_providers.ccodex-rotate"
 
 // providerKeys are the keys this tool owns inside its provider table.
 var providerKeys = map[string]bool{
@@ -39,7 +43,7 @@ func Path(codexHome string) string {
 }
 
 // BackupPath is the sidecar backup created before the first patch.
-func BackupPath(cfgPath string) string { return cfgPath + ".ccodex-rotate.bak" }
+func BackupPath(cfgPath string) string { return cfgPath + ".codexorbit.bak" }
 
 func quote(s string) string { return strconv.Quote(s) }
 
@@ -88,8 +92,14 @@ func Apply(text, listen string) string {
 				out = append(out, providerBody(listen)...)
 				continue
 			}
+			if name == legacyProviderTable {
+				continue // drop the legacy provider table entirely
+			}
 			out = append(out, ln)
 			continue
+		}
+		if section == legacyProviderTable {
+			continue // drop every line of the legacy provider table
 		}
 		if section == providerTable {
 			if providerKeys[keyOf(ln)] {
@@ -240,6 +250,7 @@ func Restore(cfgPath string) error {
 	cur = setTopLevel(cur, "openai_base_url", topBackup["openai_base_url"], hasKey(topBackup, "openai_base_url"))
 	cur = setTopLevel(cur, "model_provider", topBackup["model_provider"], hasKey(topBackup, "model_provider"))
 	cur = removeTable(cur, providerTable)
+	cur = removeTable(cur, legacyProviderTable)
 
 	return os.WriteFile(cfgPath, []byte(cur), 0o600)
 }

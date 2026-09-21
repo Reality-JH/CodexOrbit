@@ -1,14 +1,14 @@
 #!/bin/sh
-# macOS / Linux launcher for ccodex-rotate.
+# macOS / Linux launcher for orbit-core.
 # Double-click or run: ./start.command
 DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-CFG="$HOME/.ccodex-rotate/config.json"
+CFG="$HOME/.codexorbit/config.json"
 
-BIN="$DIR/ccodex-rotate"
-[ -x "$BIN" ] || BIN="$DIR/dist/ccodex-rotate-darwin-arm64"
-[ -x "$BIN" ] || BIN="$DIR/dist/ccodex-rotate-darwin-amd64"
+BIN="$DIR/orbit-core"
+[ -x "$BIN" ] || BIN="$DIR/dist/orbit-core-darwin-arm64"
+[ -x "$BIN" ] || BIN="$DIR/dist/orbit-core-darwin-amd64"
 if [ ! -x "$BIN" ]; then
-  printf '%s\n' "找不到 ccodex-rotate 可执行文件，请先运行 ./build.sh" >&2
+  printf '%s\n' "找不到 orbit-core 可执行文件，请先运行 ./build.sh" >&2
   exit 1
 fi
 
@@ -18,5 +18,5 @@ if [ ! -f "$CFG" ]; then
   "$BIN" init --config "$CFG"
 fi
 
-printf '%s\n' "启动 ccodex-rotate（不修改系统代理，也不影响本地 Clash）。按 Ctrl+C 停止并还原 Codex 配置。"
+printf '%s\n' "启动 orbit-core（不修改系统代理，也不影响本地 Clash）。按 Ctrl+C 停止并还原 Codex 配置。"
 exec "$BIN" serve --config "$CFG"

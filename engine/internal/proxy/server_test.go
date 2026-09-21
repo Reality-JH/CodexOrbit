@@ -10,7 +10,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"ccodex-rotate/internal/config"
+	"orbit-core/internal/config"
 )
 
 type fakeEgress struct {

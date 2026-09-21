@@ -1,4 +1,4 @@
-// Package config loads and saves ccodex-rotate's settings.
+// Package config loads and saves orbit-core's settings.
 package config
 
 import (
@@ -12,7 +12,7 @@ import (
 	"strings"
 )
 
-// Config is the persistent configuration for ccodex-rotate.
+// Config is the persistent configuration for orbit-core.
 type Config struct {
 	// Listen is the address of the local Codex-facing reverse proxy.
 	Listen string `json:"listen"`
@@ -167,14 +167,37 @@ func Default() Config {
 
 // DataDir returns the directory holding config, generated mihomo files and logs.
 func DataDir() string {
-	if v := strings.TrimSpace(os.Getenv("CCODEX_ROTATE_HOME")); v != "" {
+	if v := strings.TrimSpace(os.Getenv("CODEXORBIT_HOME")); v != "" {
 		return v
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return ".ccodex-rotate"
+		return ".codexorbit"
 	}
-	return filepath.Join(home, ".ccodex-rotate")
+	return filepath.Join(home, ".codexorbit")
+}
+
+// MigrateLegacyDir moves a ~/.ccodex-rotate data directory from older builds
+// to ~/.codexorbit, once, leaving nothing behind for the user to fix.
+func MigrateLegacyDir() {
+	if strings.TrimSpace(os.Getenv("CODEXORBIT_HOME")) != "" {
+		return
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return
+	}
+	oldDir := filepath.Join(home, ".ccodex-rotate")
+	newDir := filepath.Join(home, ".codexorbit")
+	if _, err := os.Stat(newDir); err == nil {
+		return
+	}
+	if _, err := os.Stat(oldDir); err != nil {
+		return
+	}
+	if err := os.Rename(oldDir, newDir); err != nil {
+		return // leave it; the engine will just start fresh in the new dir
+	}
 }
 
 // DefaultPath is the config file path inside DataDir.
@@ -296,7 +319,7 @@ func (c Config) HasSources() bool { return len(c.Subscriptions) > 0 || len(c.Pro
 func randomSecret() string {
 	b := make([]byte, 16)
 	if _, err := rand.Read(b); err != nil {
-		return "ccodex-rotate"
+		return "orbit-core"
 	}
 	return hex.EncodeToString(b)
 }

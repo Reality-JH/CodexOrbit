@@ -1,185 +1,84 @@
-# orbit-core（CodexOrbit 内置引擎）
+# orbit-core — CodexOrbit 内置路由引擎
 
-> 本目录是 CodexOrbit 随包引擎 `orbit-core.exe` 的完整源码，fork 自上游 [446599/ccodex-rotate](https://github.com/446599/CCODEX-ROTATE)，附带自研补丁：
->
-> - 请求级 TTFT（首字节耗时）记录
-> - SSE 嗅探上游实际返回的模型（`served_model`）
-> - 严格防降智：实得模型 ≠ 请求模型时返回 422 `model_mismatch`
-> - 会话锁模型：同一会话内模型漂移自动改回锚定模型
-> - 凭据亲和不再劫持手动固定节点（`PinAff`）
-> - `/api/strict-model` 运行时开关、`probe_interval_seconds` 等可调参数
-> - 启动不再自动弹浏览器面板
->
-> 构建：`go build -o orbit-core.exe ./cmd/ccodex-rotate`（Go 1.26+，零第三方依赖）
+CodexOrbit 自带的本地 Codex 反向代理引擎。**不修改系统代理，不影响你本地的 Clash。** 纯 Go 实现，零第三方依赖。
 
----
+## 架构（一句话版）
 
-# ccodex-rotate
-
-本地 Codex 反向代理：自动轮换代理节点、自动获取并注入 turn-state 凭据（个人 292 / Team 332）。
-**不修改系统代理，不影响你本地的 Clash。** 支持 macOS 与 Windows，包内已内置 mihomo 内核，解压即用。
-
----
-
-## 原理（一句话版）
-
-```
-Codex  →  ccodex-rotate(本地)  →  代理节点池  →  chatgpt.com
-                  │
-                  ├─ 转发通道(17890)：你发的消息走这里
-                  └─ 采集通道(17892)：后台去找 292/332 凭据走这里
+```text
+Codex  →  orbit-core(本地)  →  代理节点池  →  chatgpt.com
+                │
+                ├─ 转发通道(17890)：你发的消息走这里
+                └─ 采集通道(17892)：后台去找 292/332 凭据走这里
 ```
 
-- 你发消息时，工具经「**转发出口**」把请求送到 Codex 后端；
+- 你发消息时，引擎经「**转发出口**」把请求送到 Codex 后端；
 - 后台同时用「**采集出口**」逐个节点去请求，拿到 `X-Codex-Turn-State`（个人约 292 字符 / Team 约 332 字符）；
 - 采到后缓存，并在后续请求里**自动注入**，让回答更稳定；
 - 两个通道**完全独立**，互不影响。
 
----
+## 自研特性（本仓库独有）
 
-## 1. 下载
+- **请求级 TTFT**：每条请求记录首字节耗时与总耗时，供托盘控制台展示
+- **实际模型嗅探**：从 SSE 流 `response.created` 事件读出上游真正返回的模型
+- **严格防降智**（`strict_model`，默认开）：实得模型 ≠ 请求模型时返回 `422 model_mismatch`，不吃降智回答
+- **会话锁模型**（`session_model_lock`，默认开）：同一会话内模型漂移自动改回锚定模型；子 agent 的独立会话互不影响
+- **凭据亲和不劫持手动固定**：`inject_node_affinity` 下凭据亲和只在自动选路时切换出口，用户手动固定永远优先（`PinAff`）
+- **运行时开关**：`/api/injection`、`/api/strict-model` 即时生效，不用重启
+- **降级自动探测**：`probe_interval_seconds` 可调；托盘在降级期间自动退避探测，恢复即通知
+- **原生静默**：启动不弹浏览器、不写系统代理，一切走本地回环
 
-到 [Releases](https://github.com/446599/ccodex-rotate/releases) 下载对应平台压缩包，解压：
+## 构建
 
-| 平台 | 文件 |
-| --- | --- |
-| Apple 芯片 Mac | `ccodex-rotate-*-darwin-arm64.zip` |
-| Intel Mac | `ccodex-rotate-*-darwin-amd64.zip` |
-| Windows x64 | `ccodex-rotate-*-windows-amd64.zip` |
-| Windows ARM | `ccodex-rotate-*-windows-arm64.zip` |
-
-## 2. 启动
-
-- **macOS**：双击 `start.command`
-- **Windows**：双击 `start.cmd`
-
-启动后自动打开面板：**http://127.0.0.1:17850/panel**（没有节点也能启动，先进面板导入）。
-
-首次在当前浏览器打开面板时，会自动显示三步使用教程：添加订阅或节点 → 重启 Codex 并发送消息 → 查看采集与注入状态。关闭或完成后不再自动弹出，可随时点击右上角「使用教程」重新查看。
-
-新版面板按运行概览、订阅与节点、凭据管理、运行日志分区，支持节点搜索与手机布局；导入失败会保留输入，清空来源前会提示确认。
-
-## 3. 导入节点
-
-面板「**订阅与节点**」：
-
-- 在「订阅链接」框粘贴订阅地址 → 点「**添加订阅**」
-- 或在「自定义节点链接」框粘贴节点分享链接（`ss://` / `vmess://` / `vless://` / `trojan://` / `hysteria2://` 等）→ 点「**添加节点**」
-
-添加后即时生效，稍等片刻节点列表就会出现。
-
-## 4. Codex 发消息
-
-1. 重启 Codex（ChatGPT 应用），新建会话
-2. 发一条消息
-3. 之后它会自动采集凭据并注入，你正常用即可
-
-面板「已采集凭据」会显示：模型 / 长度 / 来源节点 / 已注入次数。
-
----
-
-## 凭据代理 vs 转发代理（重要）
-
-| | 转发代理 | 凭据代理 |
-| --- | --- | --- |
-| 用途 | 转发你发出去的消息 | 后台采集 292/332 凭据 |
-| 通道 | 混合端口 `17890`（组 `CODEX`） | 专用端口 `17892`（组 `COLLECT`） |
-| 选路方式 | 默认自动；可**手动固定** | **始终自动轮询**，采到即停 |
-| 受手动选择影响 | 会（就是你固定的那个） | **不会** |
-
-也就是说：**你手动固定的出口只用于发消息；采集凭据仍会在所有节点间自动轮询，互不干扰。**
-
----
-
-## 面板按键功能
-
-概览：
-- **换一个节点**：临时换一个转发出口（自动模式下）
-- **立即采集 292**：手动触发一次采集（平时发消息会自动触发）
-- **恢复自动**：解除手动固定，转发出口回到自动
-- **注入凭据：已开启/已关闭**：一键开关是否注入凭据（不影响采集）
-- **进度条**：采集时显示「正在逐个节点探测 X / Y（找到即停）」
-- **最近观测长度**：显示上游最近返回的凭据长度；若不是 292/332，说明当前出口给的不是目标值
-
-订阅与节点：
-- **添加订阅 / 清空订阅**：管理订阅链接
-- **添加节点 / 清空节点**：管理自定义节点分享链接
-
-节点表：
-- **用于转发**：把该节点固定为转发出口（**只影响发消息**，采集不受影响）
-- 状态列 `可用·292` 表示该节点曾产出过合格凭据
-
-最近请求：
-- 显示时间 / 方法 / 路径 / 状态 / 节点 / **模型** / **是否注入** / 尝试次数 / 耗时
-
----
-
-## 遇到 502 / 超时断连怎么办
-
-502 一般是**转发出口这一次没连上**（节点掉线、超时），与凭据无关。按顺序处理：
-
-1. **偶发 502 可忽略**：工具会自动换节点重试（默认最多 4 次），通常你自己不用管。
-2. **持续 502**：
-   - 面板点「**换一个节点**」，或直接在节点表对一个健康节点点「**用于转发**」；
-   - 如果你之前固定过出口，点「**恢复自动**」；
-   - 到「最近请求」看是哪个节点、什么状态，避开问题节点。
-3. **某个订阅大量节点不可用**（节点质量里“失败”很多）：到「订阅与节点」把坏订阅清掉，只保留可达的。
-4. **生成中途断流**（回复到一半断开）：工具会把该节点标记为失败并自动切换，你**再发一条**即可；一般不重复用坏节点。
-5. **想更抗超时**：可在配置里调大 `timeout_seconds`（默认 120）与 `max_retries`（默认 4），见下方配置说明。
-
-> 提示：502 与“有没有凭据”无关；没采到凭据时，工具仍会正常转发（只是不注入）。
-
----
-
-## 配置文件
-
-默认位置：
-
-- macOS：`~/.ccodex-rotate/config.json`
-- Windows：`%USERPROFILE%\.ccodex-rotate\config.json`
-
-常用项（可用 `config.example.json` 作模板）：
-
-| 项 | 说明 |
-| --- | --- |
-| `subscriptions` / `nodes` / `proxies` | 出口来源（订阅 / 节点分享链接 / 显式代理） |
-| `listen` | 本地反向代理地址（默认 `127.0.0.1:17850`） |
-| `mixed_port` / `collect_port` / `controller_port` | 转发 `17890`、采集 `17892`、控制 `17891` |
-| `probe_model` | 采集凭据用的主模型（默认 `gpt-6-astra`） |
-| `collect_models` | 额外采集的模型（默认含审查模型 `codex-auto-review`） |
-| `state_lengths` | 目标凭据长度：个人 `292`、Team `332`（默认 `[292, 332]`） |
-| `auto_collect` | 收到目标模型请求就自动采集（默认 `true`） |
-| `inject_state` | 是否注入凭据（默认 `true`，面板也可切换） |
-| `max_retries` / `timeout_seconds` | 失败重试次数 / 响应头超时秒数 |
-| `collect_success_interval_seconds` / `collect_retry_interval_seconds` | 采到后刷新间隔 / 采不到重试间隔 |
-
----
-
-## 常用命令（可选）
-
-```sh
-ccodex-rotate init                 # 创建默认配置
-ccodex-rotate sub add <url...>     # 添加订阅
-ccodex-rotate node add <link...>   # 添加节点分享链接
-ccodex-rotate serve                # 启动（Ctrl+C 停止并还原 Codex 配置）
-ccodex-rotate collect              # 立即采集一次
-ccodex-rotate status / nodes       # 查看状态 / 节点
-ccodex-rotate fetch-core           # 下载 mihomo 内核（包内已内置，一般不需要）
-ccodex-rotate restore              # 还原 Codex 配置
+```cmd
+cd engine
+go build -o orbit-core.exe ./cmd/orbit-core
 ```
 
----
+需要 Go 1.26+。`go.sum` 不存在是正常的——零第三方依赖。
 
-## 从源码构建（可选）
+## 命令
 
-```sh
-./build.sh      # macOS/Linux，产物在 dist/
-build.bat       # Windows
+```text
+orbit-core init                    创建默认配置
+orbit-core sub add <url...>        添加订阅链接
+orbit-core node add <link...>      添加节点分享链接
+orbit-core serve                   启动（托盘伴侣会自动拉起，一般不用手动跑）
+orbit-core collect                 立即采集一次凭据
+orbit-core status / nodes          查看状态 / 节点
+orbit-core fetch-core              下载 mihomo 内核（包内已内置，一般不需要）
+orbit-core restore                 还原 Codex 配置
+orbit-core path                    显示配置与数据目录位置
 ```
 
-## 说明
+## 配置
 
-- 采集会消耗少量账号额度；凭据按模型缓存，采到即停，30 分钟后刷新。
-- 292（个人）/ 332（Team）为社区经验形状，能否采到取决于账号与出口。
-- 退出（启动窗口 Ctrl+C）会自动还原 Codex 配置；不修改系统代理与本地 Clash。
-- 本工具与 OpenAI、Mihomo 无隶属关系；包内 mihomo 内核来自 MetaCubeX/mihomo，见 `LICENSE.mihomo`。
+`%USERPROFILE%\.codexorbit\config.json`（老版本数据目录自动迁移）。常用字段：
+
+| 字段 | 默认 | 说明 |
+|---|---|---|
+| `strict_model` | `true` | 实得模型≠请求模型时拒绝（422） |
+| `session_model_lock` | `true` | 同一会话内锁定首个模型 |
+| `inject_state` | `true` | 注入已采集的 292 凭据 |
+| `inject_node_affinity` | `false` | 自动模式下凭据走产出它的节点 |
+| `force_model` | `""` | 留空关闭；设置后改写所有请求模型（混用子 agent 勿开） |
+| `probe_interval_seconds` | `0` | 降级探测间隔；0 = 自动退避（120s→600s） |
+| `probe_timeout_seconds` | `6` | 采集探测单节点超时 |
+| `timeout_seconds` | `120` | 上游请求总超时 |
+| `max_retries` | `5` | 请求内换节点重试上限 |
+| `state_ttl_seconds` | `3600` | 凭据有效期 |
+| `collect_success_interval_seconds` | `1800` | 采集成功后的续期节奏 |
+| `collect_retry_interval_seconds` | `300` | 采集失败后的重试节奏 |
+
+## 本地 API（托盘伴侣走这套）
+
+`GET /api/status` · `GET /api/nodes` · `POST /api/pin` · `POST /api/rotate` · `POST /api/reset` · `POST /api/collect` · `POST /api/injection` · `POST /api/strict-model` · `POST /api/sources/add|clear` · `GET /healthz`
+
+网页面板仍在 `http://127.0.0.1:17850/panel`（不会自动打开）；日常使用用 CodexOrbit 原生控制台即可。
+
+## 隐私
+
+- 凭据值从不显示在界面或日志里。
+- 全部通信走 `127.0.0.1` 本地回环 + 你配置的节点出口；无遥测、无外部上报。
+- 本引擎不含、也不分发任何代理订阅——节点来源由用户自行提供。
+
+第三方组件声明见 [THIRD_PARTY_NOTICES.txt](THIRD_PARTY_NOTICES.txt)。

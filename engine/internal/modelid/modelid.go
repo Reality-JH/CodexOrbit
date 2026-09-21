@@ -1,5 +1,5 @@
 // Package modelid normalizes a requested model identifier into a stable
-// canonical name. It is intentionally small: ccodex-rotate only needs to agree
+// canonical name. It is intentionally small: orbit-core only needs to agree
 // on one name per model so turn-state caching, probing and injection all key
 // off the same value (e.g. "gpt-5.4" and "gpt-5.4-high" must collapse).
 package modelid

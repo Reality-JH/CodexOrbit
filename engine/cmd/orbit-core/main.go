@@ -1,4 +1,4 @@
-// Command ccodex-rotate is a small, local Codex reverse proxy with health-based
+// Command orbit-core is a small, local Codex reverse proxy with health-based
 // proxy-node rotation. It intentionally avoids injecting or harvesting upstream
 // turn-state, which keeps it simple and stable.
 package main
@@ -19,17 +19,17 @@ import (
 	"syscall"
 	"time"
 
-	"ccodex-rotate/internal/codexcfg"
-	"ccodex-rotate/internal/config"
-	"ccodex-rotate/internal/core"
-	"ccodex-rotate/internal/mihomo"
-	"ccodex-rotate/internal/nodes"
-	"ccodex-rotate/internal/proxy"
-	"ccodex-rotate/internal/subscription"
-	"ccodex-rotate/internal/web"
+	"orbit-core/internal/codexcfg"
+	"orbit-core/internal/config"
+	"orbit-core/internal/core"
+	"orbit-core/internal/mihomo"
+	"orbit-core/internal/nodes"
+	"orbit-core/internal/proxy"
+	"orbit-core/internal/subscription"
+	"orbit-core/internal/web"
 )
 
-const version = "0.4.1"
+const version = "1.1.0"
 
 func main() {
 	log.SetFlags(log.Ltime)
@@ -42,6 +42,7 @@ func main() {
 	cfgPath := fs.String("config", config.DefaultPath(), "config file path")
 	codexHome := fs.String("codex-home", "", "override ~/.codex directory")
 	_ = fs.Parse(os.Args[2:])
+	config.MigrateLegacyDir()
 
 	switch cmd {
 	case "init":
@@ -73,7 +74,7 @@ func main() {
 		fmt.Println("data  :", config.DataDir())
 		fmt.Println("codex :", codexcfg.Path(firstNonEmpty(codexHomeString(*codexHome), "")))
 	case "version", "-v", "--version":
-		fmt.Println("ccodex-rotate", version)
+		fmt.Println("orbit-core", version)
 	default:
 		usage()
 		os.Exit(2)
@@ -81,25 +82,25 @@ func main() {
 }
 
 func usage() {
-	fmt.Print(`ccodex-rotate ` + version + `
+	fmt.Print(`orbit-core ` + version + `
 
-  ccodex-rotate init       create a default config if none exists
-  ccodex-rotate sub add <url...>     add subscription link(s)
-  ccodex-rotate sub list             list subscription links (redacted)
-  ccodex-rotate sub rm <index|url>   remove a subscription
-  ccodex-rotate sub clear            remove all subscriptions
-  ccodex-rotate proxy add <uri...>   add an explicit proxy (http/https/socks5)
-  ccodex-rotate proxy list           list explicit proxies
-  ccodex-rotate proxy clear          remove all explicit proxies
-  ccodex-rotate fetch-core        download a mihomo core for this platform
-  ccodex-rotate core [path]       show detected core, or set mihomo_path
-  ccodex-rotate serve      start mihomo + local proxy + panel (Ctrl+C to stop)
-  ccodex-rotate check      validate config and generated mihomo config
-  ccodex-rotate status     read live status from a running instance
-  ccodex-rotate nodes      list nodes and health from a running instance
-  ccodex-rotate collect    collect a turn-state now (one node at a time)
-  ccodex-rotate restore    restore the Codex config backup
-  ccodex-rotate paths      print config/data/codex paths
+  orbit-core init       create a default config if none exists
+  orbit-core sub add <url...>     add subscription link(s)
+  orbit-core sub list             list subscription links (redacted)
+  orbit-core sub rm <index|url>   remove a subscription
+  orbit-core sub clear            remove all subscriptions
+  orbit-core proxy add <uri...>   add an explicit proxy (http/https/socks5)
+  orbit-core proxy list           list explicit proxies
+  orbit-core proxy clear          remove all explicit proxies
+  orbit-core fetch-core        download a mihomo core for this platform
+  orbit-core core [path]       show detected core, or set mihomo_path
+  orbit-core serve      start mihomo + local proxy + panel (Ctrl+C to stop)
+  orbit-core check      validate config and generated mihomo config
+  orbit-core status     read live status from a running instance
+  orbit-core nodes      list nodes and health from a running instance
+  orbit-core collect    collect a turn-state now (one node at a time)
+  orbit-core restore    restore the Codex config backup
+  orbit-core paths      print config/data/codex paths
 
 Flags:
   --config PATH      config file (default ` + config.DefaultPath() + `)
@@ -116,7 +117,7 @@ func runInit(cfgPath string) {
 		fatal(err)
 	}
 	log.Printf("created %s", cfgPath)
-	log.Printf("next: ccodex-rotate sub add <your-subscription-url>")
+	log.Printf("next: orbit-core sub add <your-subscription-url>")
 }
 
 func runSub(cfgPath string, args []string) {
@@ -261,7 +262,7 @@ func runCore(cfgPath string, args []string) {
 	if p, err := mihomo.FindBinary(cfg); err == nil {
 		log.Printf("detected mihomo: %s", p)
 	} else {
-		log.Printf("not found; run `ccodex-rotate fetch-core` or `ccodex-rotate core <path>`")
+		log.Printf("not found; run `orbit-core fetch-core` or `orbit-core core <path>`")
 	}
 }
 
@@ -272,14 +273,14 @@ func runFetchCore(cfgPath string) {
 	log.Printf("downloading mihomo for this platform ...")
 	path, err := core.Fetch(context.Background(), cfg.DownloadProxy, dir)
 	if err != nil {
-		fatal(fmt.Errorf("%w (or set mihomo_path manually: `ccodex-rotate core <path>`)", err))
+		fatal(fmt.Errorf("%w (or set mihomo_path manually: `orbit-core core <path>`)", err))
 	}
 	cfg.MihomoPath = path
 	if err := config.Save(cfgPath, cfg); err != nil {
 		fatal(err)
 	}
 	log.Printf("mihomo downloaded: %s", path)
-	log.Printf("mihomo_path saved; run `ccodex-rotate serve`")
+	log.Printf("mihomo_path saved; run `orbit-core serve`")
 }
 
 func contains(list []string, v string) bool {
@@ -307,7 +308,7 @@ func runServe(cfgPath, codexHome string) {
 	fatal(err)
 	if !cfg.HasSources() {
 		log.Printf("no subscriptions/proxies yet; starting anyway. Open the panel and add a subscription:")
-		log.Printf("  http://%s/panel  (or run: ccodex-rotate sub add \"https://...\")", cfg.Listen)
+		log.Printf("  http://%s/panel  (or run: orbit-core sub add \"https://...\")", cfg.Listen)
 	}
 	dataDir := config.DataDir()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -569,7 +570,7 @@ func runCollect(cfgPath string) {
 		fatal(fmt.Errorf("is `serve` running? %w", err))
 	}
 	defer resp.Body.Close()
-	log.Printf("collection started; check progress with `ccodex-rotate status`")
+	log.Printf("collection started; check progress with `orbit-core status`")
 }
 
 // collectLoop collects a turn-state, then waits 30 minutes after success or
