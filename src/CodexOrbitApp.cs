@@ -88,6 +88,7 @@ class OrbitApp : ApplicationContext
     volatile bool alive;
     volatile int errSpike;
     volatile bool spikeNotified;
+    volatile bool downNotified;
     DateTime spikeFixUntil = DateTime.MinValue;
     DateTime lastCollectNudge = DateTime.MinValue;
     string tip = "CodexOrbit";
@@ -543,6 +544,17 @@ class OrbitApp : ApplicationContext
             Log.Write("guide", "fail streak - refreshing 292 too");
             ThreadPool.QueueUserWorkItem(delegate { Http.Post(BaseUrl + "/api/collect"); });
         }
+        // upstream silently serving a different model than requested (e.g. astra -> luna):
+        // no client fix exists - rotating nodes won't help - so warn once per episode
+        if (snap != null && snap.WantModel != "" && !downNotified)
+        {
+            downNotified = true;
+            Log.Write("guide", "downgrade " + snap.WantModel + " -> " + snap.GotModel);
+            Balloon(L10n.T("Upstream downgraded your model", "上游偷偷换了模型"),
+                string.Format(L10n.T("Asked for {0}, got {1} - rotation won't fix this; it clears on its own later",
+                    "请求 {0}，实际给的 {1} · 换节点没用，等配额恢复即回"), snap.WantModel, snap.GotModel));
+        }
+        if (snap != null && snap.WantModel == "") downNotified = false;
 
         prevAliveInit = true; prevAlive = alive; if (node != "") prevNode = node;
 
@@ -747,6 +759,7 @@ class StatusSnapshot
     public string NextCollect = "";
     public long LastMillis;
     public int FailStreak;
+    public string WantModel = "", GotModel = "";
 
     public long[] LatencyHistory = new long[0];
     public System.Collections.ArrayList Recent = new System.Collections.ArrayList();
@@ -797,6 +810,21 @@ class StatusSnapshot
                     object sv; long st = 0;
                     if (r != null && r.TryGetValue("status", out sv)) long.TryParse(Convert.ToString(sv), out st);
                     if (st == 403 || st == 429 || st >= 500) o.FailStreak++; else break;
+                }
+                // silent downgrade: newest responses call whose served model != requested
+                foreach (var it in o.Recent)
+                {
+                    var r = it as System.Collections.Generic.Dictionary<string, object>;
+                    if (r == null) continue;
+                    object pv, sv2, rmv, smv2; long st2 = 0;
+                    r.TryGetValue("path", out pv); r.TryGetValue("status", out sv2);
+                    r.TryGetValue("model", out rmv); r.TryGetValue("served_model", out smv2);
+                    long.TryParse(Convert.ToString(sv2), out st2);
+                    string p = Convert.ToString(pv), w = Convert.ToString(rmv), g = Convert.ToString(smv2);
+                    if (st2 != 200 || g == null || g == "") continue;
+                    if (p != null && p.EndsWith("responses") && w != null && w != "" && g != w)
+                    { o.WantModel = w; o.GotModel = g; }
+                    break;
                 }
             }
             object states;
@@ -1032,6 +1060,8 @@ class StatusCard : Form
             s.Ok, s.Errors, rate, Math.Round(s.LastMillis / 1000.0, 1));
         if (s.FailStreak >= 3)
             statsLbl.Text += L10n.T("  ⚠ failing ×" + s.FailStreak, "  ⚠ 连失败 ×" + s.FailStreak);
+        if (s.WantModel != "")
+            statsLbl.Text += string.Format(L10n.T("  ⚠ downgraded: {0}", "  ⚠ 降级:{0}"), s.GotModel);
         string next = s.NextCollect.Length >= 16 ? s.NextCollect.Substring(11, 5) : "—";
         string pool = s.Collecting
             ? L10n.T("collecting", "采集中") + (s.CollectTotal > 0 ? " " + s.CollectTried + "/" + s.CollectTotal : "")
@@ -1277,6 +1307,8 @@ class ConsoleForm : Form
             stats.Text = string.Format(L10n.T("{0} ok · {1} err · {2} · last {3}s", "{0} 成功 · {1} 失败 · {2} · 上次 {3}s"),
                 s.Ok, s.Errors, rate, Math.Round(s.LastMillis / 1000.0, 1));
             if (warn) stats.Text += s.Node == "AUTO" ? L10n.T("  ⚠ failing - hit Switch", "  ⚠ 连失败 · 点「切换」") : L10n.T("  ⚠ failing - hit Auto", "  ⚠ 连失败 · 点「自动」");
+            if (s.WantModel != "")
+                stats.Text += string.Format(L10n.T("  ⚠ asked {0}, served {1}", "  ⚠ 求 {0} 实得 {1}"), s.WantModel, s.GotModel);
             string next = s.NextCollect.Length >= 16 ? s.NextCollect.Substring(11, 5) : "—";
             string pool = s.Collecting
                 ? L10n.T("collecting", "采集中") + (s.CollectTotal > 0 ? " " + s.CollectTried + "/" + s.CollectTotal : "")
