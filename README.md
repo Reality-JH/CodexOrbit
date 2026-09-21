@@ -251,7 +251,7 @@
 2. 双击 `CodexOrbit.exe`（`orbit-core.exe` 已附带，两个文件保持在同一目录即可）
 3. 开机自启：`Win+R` → `shell:startup` → 丢个 `CodexOrbit.exe` 快捷方式进去
 
-> `orbit-core.exe` 由我们基于上游 ccodex-rotate 源码构建，附带自研 TTFT（首字节耗时）补丁——源码与补丁公开在 [Reality-JH/ccodex-rotate](https://github.com/Reality-JH/ccodex-rotate)，可自行复现构建。
+> `orbit-core.exe` 由我们基于上游 ccodex-rotate 源码构建，附带自研补丁（TTFT 首字节耗时、严格防降智、会话锁模型等）——全部源码就在本仓库 [`engine/`](engine/) 目录，`go build ./cmd/ccodex-rotate` 即可复现。
 
 配置沿用 `~/.ccodex-rotate/config.json`（本工具不改你的订阅和节点）。
 

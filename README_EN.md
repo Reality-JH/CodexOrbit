@@ -252,7 +252,7 @@ More evidence (mid-stream disconnects, throttling analysis, the `retry_429` sour
 2. Double-click `CodexOrbit.exe` (`orbit-core.exe` ships in the zip — just keep the two files together)
 3. Autostart: `Win+R` → `shell:startup` → drop a `CodexOrbit.exe` shortcut in
 
-> `orbit-core.exe` is built by us from upstream ccodex-rotate source with our own TTFT (time-to-first-byte) patch — source and patch are public at [Reality-JH/ccodex-rotate](https://github.com/Reality-JH/ccodex-rotate), so you can reproduce the build yourself.
+> `orbit-core.exe` is built by us from upstream ccodex-rotate source with our own patches (TTFT, strict anti-downgrade, session model lock, …) — the full source lives in this repo under [`engine/`](engine/); `go build ./cmd/ccodex-rotate` reproduces it.
 
 It reads `~/.ccodex-rotate/config.json` as-is (your subscription and nodes are untouched).
 
