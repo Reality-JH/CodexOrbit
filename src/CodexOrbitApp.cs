@@ -1632,8 +1632,10 @@ static class Shot
         card.NoAutoHide = true;
         card.StartPosition = FormStartPosition.Manual;
         card.Location = new Point(60, 60);
+        card.TopMost = true; // guarantee nothing else covers the capture region
         card.RefreshData(StatusSnapshot.Demo());
         card.Show();
+        card.Activate();
         Application.DoEvents();
         Thread.Sleep(900); // let GDI+ finish
         var bmp = new Bitmap(card.Width, card.Height);
@@ -1660,7 +1662,9 @@ static class Shot
         f.NoFetch = true;
         f.StartPosition = FormStartPosition.Manual;
         f.Location = new Point(60, 60);
+        f.TopMost = true; // guarantee nothing else covers the capture region
         f.Show();
+        f.Activate();
         Application.DoEvents();
         f.ApplyData(StatusSnapshot.Demo(), StatusSnapshot.DemoNodesJson);
         Thread.Sleep(900); // let GDI+ settle
