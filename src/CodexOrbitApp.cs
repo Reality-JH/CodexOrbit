@@ -815,6 +815,40 @@ class StatusSnapshot
         catch { return new StatusSnapshot { Alive = true }; }
     }
 
+    // Demo snapshot + node list for doc screenshots - real node/subscription
+    // names must never leak into published images.
+    public static StatusSnapshot Demo()
+    {
+        var o = new StatusSnapshot();
+        o.Alive = true; o.Node = "AUTO";
+        o.Ok = 13; o.Errors = 1; o.Alive2 = 6; o.Reachable = 4;
+        o.LastCollectOk = true; o.NextCollect = "2026-01-01T12:57:00+08:00";
+        o.LastMillis = 28300;
+        o.LatencyHistory = new long[] { 39669, 13126, 44739, 872, 28300, 37400 };
+        o.States.Add(D("model", "gpt-6-astra", "length", 292, "node", "Node-A", "hits", 25));
+        o.Recent.Add(D("time", "2026-01-01T12:38:33+08:00", "method", "POST", "path", "/backend-api/codex/responses", "status", 200, "node", "Node-A", "injected", true, "attempts", 1, "ttft", 8700, "millis", 28300));
+        o.Recent.Add(D("time", "2026-01-01T12:38:00+08:00", "method", "POST", "path", "/backend-api/codex/responses", "status", 200, "node", "Node-A", "injected", true, "attempts", 1, "ttft", 2100, "millis", 37400));
+        o.Recent.Add(D("time", "2026-01-01T12:37:20+08:00", "method", "GET", "path", "/backend-api/codex/models", "status", 200, "node", "Node-A", "injected", false, "attempts", 1, "ttft", 500, "millis", 540));
+        o.Recent.Add(D("time", "2026-01-01T12:35:10+08:00", "method", "POST", "path", "/backend-api/codex/responses", "status", 502, "node", "Node-B", "injected", false, "attempts", 2, "ttft", 0, "millis", 4300));
+        return o;
+    }
+
+    public const string DemoNodesJson =
+        "{\"current\":\"Node-A\",\"nodes\":[" +
+        "{\"name\":\"Node-A\",\"state\":\"ok\",\"type\":\"Tuic\",\"delay\":38}," +
+        "{\"name\":\"Node-B\",\"state\":\"ok\",\"type\":\"Vless\",\"delay\":52}," +
+        "{\"name\":\"Node-C\",\"state\":\"ok\",\"type\":\"Hysteria2\",\"delay\":71}," +
+        "{\"name\":\"Node-D\",\"state\":\"ok\",\"type\":\"Tuic\",\"delay\":44}," +
+        "{\"name\":\"Node-E\",\"state\":\"reachable\",\"type\":\"Vless\",\"delay\":0}," +
+        "{\"name\":\"Node-F\",\"state\":\"unknown\",\"type\":\"SS\",\"delay\":0}]}";
+
+    static System.Collections.Generic.Dictionary<string, object> D(params object[] kv)
+    {
+        var d = new System.Collections.Generic.Dictionary<string, object>();
+        for (int i = 0; i + 1 < kv.Length; i += 2) d[Convert.ToString(kv[i])] = kv[i + 1];
+        return d;
+    }
+
     static string S(System.Collections.Generic.Dictionary<string, object> j, string k)
     {
         object v; return j.TryGetValue(k, out v) && v != null ? Convert.ToString(v) : "";
@@ -1127,6 +1161,7 @@ class ConsoleForm : Form
     ListBox nodes, creds, reqs;
     Button autoBtn, switchBtn;
     System.Windows.Forms.Timer refreshTimer;
+    internal bool NoFetch; // shot mode: demo data only, never hit the live API
     System.Collections.ArrayList nodeRaw;
 
     public ConsoleForm()
@@ -1185,7 +1220,7 @@ class ConsoleForm : Form
         Controls.AddRange(new Control[] { head, stats, state, nl2, nodes, cl, creds, rl, reqs, hint });
 
         refreshTimer = new System.Windows.Forms.Timer { Interval = 4000 };
-        refreshTimer.Tick += delegate { if (Visible) Reload(); };
+        refreshTimer.Tick += delegate { if (Visible && !NoFetch) Reload(); };
         refreshTimer.Start();
     }
 
@@ -1195,7 +1230,7 @@ class ConsoleForm : Form
         base.OnFormClosed(e);
     }
 
-    protected override void OnShown(EventArgs e) { base.OnShown(e); Reload(); }
+    protected override void OnShown(EventArgs e) { base.OnShown(e); if (!NoFetch) Reload(); }
 
     void RefreshSoon() { new Thread(new ThreadStart(delegate { Thread.Sleep(1500); Reload(); })) { IsBackground = true }.Start(); }
 
@@ -1227,7 +1262,7 @@ class ConsoleForm : Form
         });
     }
 
-    void ApplyData(StatusSnapshot s, string nodesJson)
+    internal void ApplyData(StatusSnapshot s, string nodesJson)
     {
         bool warn = s != null && s.FailStreak >= 3;
         if (autoBtn != null) { autoBtn.Enabled = s == null || s.Node != "AUTO"; autoBtn.BackColor = warn && s.Node != "AUTO" ? Accent : BgSoft; }
@@ -1342,7 +1377,7 @@ static class Shot
         card.NoAutoHide = true;
         card.StartPosition = FormStartPosition.Manual;
         card.Location = new Point(60, 60);
-        card.RefreshData(StatusSnapshot.Fetch());
+        card.RefreshData(StatusSnapshot.Demo());
         card.Show();
         Application.DoEvents();
         Thread.Sleep(900); // let GDI+ finish
@@ -1367,12 +1402,13 @@ static class Shot
     public static void SaveConsole(string path)
     {
         var f = new ConsoleForm();
+        f.NoFetch = true;
         f.StartPosition = FormStartPosition.Manual;
         f.Location = new Point(60, 60);
         f.Show();
         Application.DoEvents();
-        f.Reload();
-        Thread.Sleep(1500); // data fetch + GDI settle
+        f.ApplyData(StatusSnapshot.Demo(), StatusSnapshot.DemoNodesJson);
+        Thread.Sleep(900); // let GDI+ settle
         Application.DoEvents();
         var bmp = new Bitmap(f.Width, f.Height);
         using (var g = Graphics.FromImage(bmp))
