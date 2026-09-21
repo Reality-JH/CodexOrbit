@@ -1319,6 +1319,10 @@ class ConsoleForm : Form
                 row += string.Format(L10n.T(" · total {0}", " · 总 {0}"), dur);
                 if (att > 1) row += " ×" + att;
                 object inj; if (r.TryGetValue("injected", out inj) && Convert.ToString(inj) == "True") row += " ·292";
+                object sm, rm;
+                r.TryGetValue("served_model", out sm); r.TryGetValue("model", out rm);
+                string smv = Convert.ToString(sm), rmv = Convert.ToString(rm);
+                if (smv != "" && smv != rmv) row += L10n.T(" · got:", " · 实际:") + smv;
                 object nd; if (r.TryGetValue("node", out nd)) row += " · " + StatusCard.StripFlagsText(Convert.ToString(nd));
                 reqs.Items.Add(row);
             }
