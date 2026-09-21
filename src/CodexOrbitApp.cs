@@ -266,10 +266,13 @@ class OrbitApp : ApplicationContext
         menu.Font = new Font("Microsoft YaHei UI", 10f);
         menu.ShowImageMargin = false;
 
-        string topName = lastStatus != null && lastStatus.Node != "" ? StatusCard.StripFlagsText(lastStatus.Node) : L10n.T("running", "运行中");
-        bool topAuto = lastStatus != null && lastStatus.Node == "AUTO";
+        bool topAuto = lastStatus == null || lastStatus.Manual == "";
+        string curExit = lastStatus != null && lastStatus.Node != "" && lastStatus.Node != "AUTO"
+            ? StatusCard.StripFlagsText(lastStatus.Node) : "";
         var st = new ToolStripLabel(alive
-            ? "  " + (topAuto ? L10n.T("auto-routing", "自动选路") : topName + L10n.T(" · pinned", " · 已固定"))
+            ? "  " + (topAuto
+                ? L10n.T("auto-routing", "自动选路") + (curExit != "" ? " · " + curExit : "")
+                : StatusCard.StripFlagsText(lastStatus.Manual) + L10n.T(" · pinned", " · 已固定"))
             : L10n.T("  offline", "  离线"));
         st.ForeColor = Color.FromArgb(150, 150, 160);
         menu.Items.Add(st);
@@ -285,6 +288,7 @@ class OrbitApp : ApplicationContext
             {
                 var j = new JavaScriptSerializer().Deserialize<System.Collections.Generic.Dictionary<string, object>>(nodes);
                 string current = j.ContainsKey("current") ? Convert.ToString(j["current"]) : "";
+                string manual = j.ContainsKey("manual") ? Convert.ToString(j["manual"]) : "";
                 var arr = j.ContainsKey("nodes") ? j["nodes"] as System.Collections.ArrayList : null;
                 if (arr == null) return;
                 if (arr.Count == 0)
@@ -300,8 +304,9 @@ class OrbitApp : ApplicationContext
                     string stt = Convert.ToString(d["state"]);
                     long delay = 0; object dv;
                     if (d.TryGetValue("delay", out dv) && dv != null) long.TryParse(Convert.ToString(dv), out delay);
-                    bool cur = name == current;
-                    var item = new ToolStripMenuItem((cur ? "✓ " : stt == "ok" ? "● " : "○ ") + name
+                    // ✓ = user-pinned, ▸ = current exit under auto (e.g. credential affinity)
+                    string mark = name == manual ? "✓ " : (name == current && manual == "" ? "▸ " : stt == "ok" ? "● " : "○ ");
+                    var item = new ToolStripMenuItem(mark + name
                         + (delay > 0 ? "  " + delay + "ms" : ""));
                     string n = name;
                     item.Click += delegate { PinNode(n); };
@@ -537,7 +542,7 @@ class OrbitApp : ApplicationContext
 
     int pollBusy;
 
-    internal void MarkAuto() { if (lastStatus != null) lastStatus.Node = "AUTO"; }
+    internal void MarkAuto() { if (lastStatus != null) { lastStatus.Node = "AUTO"; lastStatus.Manual = ""; } }
 
     void ApplySpikeFix()
     {
@@ -592,9 +597,9 @@ class OrbitApp : ApplicationContext
         {
             spikeNotified = true;
             spikeFixUntil = DateTime.Now.AddSeconds(45);
-            Log.Write("guide", streak + " consecutive failures - prompting " + (snap.Node == "AUTO" ? "switch" : "auto"));
+            Log.Write("guide", streak + " consecutive failures - prompting " + (snap.Manual == "" ? "switch" : "auto"));
             Balloon(L10n.T("Codex requests failing ×" + streak, "Codex 请求连续失败 ×" + streak),
-                snap.Node == "AUTO"
+                snap.Manual == ""
                     ? L10n.T("Click to switch to the next healthy node", "点我切换到下一个健康节点")
                     : L10n.T("Click to restore auto-routing (recommended)", "点我恢复自动选路（推荐）"));
         }
@@ -839,6 +844,7 @@ class StatusSnapshot
 {
     public bool Alive;
     public string Node = "";
+    public string Manual = ""; // user-pinned node; "" = auto/affinity exit
     public long Ok, Errors, Alive2, Reachable;
     public bool Collecting, LastCollectOk, AuthReady, InjectOn, StrictOn;
     public long CollectTried, CollectTotal;
@@ -862,6 +868,7 @@ class StatusSnapshot
             var o = new StatusSnapshot();
             o.Alive = true;
             o.Node = S(j, "node");
+            o.Manual = S(j, "manual");
             o.Ok = L(j, "ok"); o.Errors = L(j, "errors");
             o.Alive2 = L(j, "alive"); o.Reachable = L(j, "reachable");
             o.Collecting = B(j, "collecting"); o.LastCollectOk = B(j, "last_collect_ok");
@@ -1141,9 +1148,10 @@ class StatusCard : Form
         }
         if (InvokeRequired) { BeginInvoke(new MethodInvoker(delegate { RefreshData(s); })); return; }
         last = s;
-        SetText(nodeLbl, string.IsNullOrEmpty(s.Node) ? L10n.T("(no node)", "(无节点)")
-            : s.Node == "AUTO" ? L10n.T("AUTO · auto-routing", "AUTO · 自动选路")
-            : StripFlags(s.Node) + L10n.T(" · pinned", " · 已固定"));
+        SetText(nodeLbl, !string.IsNullOrEmpty(s.Manual)
+            ? StripFlags(s.Manual) + L10n.T(" · pinned", " · 已固定")
+            : L10n.T("AUTO · auto-routing", "AUTO · 自动选路")
+                + (s.Node != "" && s.Node != "AUTO" ? " · " + StripFlags(s.Node) : s.Node == "" ? L10n.T(" · (no node)", " · (无节点)") : ""));
         long total = s.Ok + s.Errors;
         string rate = total > 0 ? Math.Round(100.0 * s.Ok / total) + "%" : "—";
         string statLine = string.Format(L10n.T("{0} ok · {1} err · {2} · last {3}s", "{0} 成功 · {1} 失败 · {2} · 上次 {3}s"),
@@ -1476,8 +1484,8 @@ class ConsoleForm : Form
     internal void ApplyData(StatusSnapshot s, string nodesJson)
     {
         bool warn = s != null && s.FailStreak >= 3;
-        if (autoBtn != null) { autoBtn.Enabled = s == null || s.Node != "AUTO"; autoBtn.BackColor = warn && s.Node != "AUTO" ? Accent : BgSoft; }
-        if (switchBtn != null) switchBtn.BackColor = warn && s.Node == "AUTO" ? Accent : BgSoft;
+        if (autoBtn != null) { autoBtn.Enabled = s == null || s.Manual != ""; autoBtn.BackColor = warn && s.Manual != "" ? Accent : BgSoft; }
+        if (switchBtn != null) switchBtn.BackColor = warn && s.Manual == "" ? Accent : BgSoft;
         if (s != null)
         {
             curInj = s.InjectOn; curStrict = s.StrictOn;
@@ -1495,12 +1503,13 @@ class ConsoleForm : Form
         {
             long total = s.Ok + s.Errors;
             string rate = total > 0 ? Math.Round(100.0 * s.Ok / total) + "%" : "—";
-            SetText(head, s.Node == "AUTO" ? "CodexOrbit  ·  " + L10n.T("auto-routing", "自动选路")
-                : string.IsNullOrEmpty(s.Node) ? "CodexOrbit"
-                : "CodexOrbit  ·  " + StatusCard.StripFlagsText(s.Node) + L10n.T(" (pinned)", "（已固定）"));
+            SetText(head, s.Manual != ""
+                ? "CodexOrbit  ·  " + StatusCard.StripFlagsText(s.Manual) + L10n.T(" (pinned)", "（已固定）")
+                : "CodexOrbit  ·  " + L10n.T("auto-routing", "自动选路")
+                    + (s.Node != "" && s.Node != "AUTO" ? " · " + StatusCard.StripFlagsText(s.Node) : ""));
             string statLine = string.Format(L10n.T("{0} ok · {1} err · {2} · last {3}s", "{0} 成功 · {1} 失败 · {2} · 上次 {3}s"),
                 s.Ok, s.Errors, rate, Math.Round(s.LastMillis / 1000.0, 1));
-            if (warn) statLine += s.Node == "AUTO" ? L10n.T("  ⚠ failing - hit Switch", "  ⚠ 连失败 · 点「切换」") : L10n.T("  ⚠ failing - hit Auto", "  ⚠ 连失败 · 点「自动」");
+            if (warn) statLine += s.Manual == "" ? L10n.T("  ⚠ failing - hit Switch", "  ⚠ 连失败 · 点「切换」") : L10n.T("  ⚠ failing - hit Auto", "  ⚠ 连失败 · 点「自动」");
             if (s.WantModel != "")
                 statLine += string.Format(L10n.T("  ⚠ asked {0}, served {1}", "  ⚠ 求 {0} 实得 {1}"), s.WantModel, s.GotModel);
             SetText(stats, statLine);
@@ -1573,7 +1582,7 @@ class ConsoleForm : Form
             if (arr == null) return;
             var nrow = new System.Collections.Generic.List<string>();
             if (arr.Count == 0) nrow.Add(L10n.T("(empty - add a subscription with +Sub)", "（空 · 先点 +订阅 添加订阅链接）"));
-            if (s != null && s.Node == "AUTO" && current != "" && current != "AUTO")
+            if (s != null && s.Manual == "" && current != "" && current != "AUTO")
                 SetText(head, "CodexOrbit  ·  " + L10n.T("auto", "自动") + " · " + StatusCard.StripFlagsText(current));
             nodeRaw = arr;
             int okCount = 0;
