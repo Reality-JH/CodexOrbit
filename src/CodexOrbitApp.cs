@@ -89,6 +89,7 @@ class OrbitApp : ApplicationContext
     volatile int errSpike;
     volatile bool spikeNotified;
     volatile bool downNotified;
+    DateTime lastProbe = DateTime.MinValue;
     DateTime spikeFixUntil = DateTime.MinValue;
     DateTime lastCollectNudge = DateTime.MinValue;
     string tip = "CodexOrbit";
@@ -205,6 +206,31 @@ class OrbitApp : ApplicationContext
         catch { }
     }
 
+    // FireModelProbe sends a tiny responses request just to observe which model
+    // upstream actually serves right now - used to detect a downgrade ending.
+    internal void FireModelProbe(string model)
+    {
+        try
+        {
+            var p = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".codex", "auth.json");
+            var j = new JavaScriptSerializer().Deserialize<System.Collections.Generic.Dictionary<string, object>>(File.ReadAllText(p));
+            var tk = j["tokens"] as System.Collections.Generic.Dictionary<string, object>;
+            if (tk == null) return;
+            var req = (HttpWebRequest)WebRequest.Create(BaseUrl + "/backend-api/codex/responses");
+            req.Method = "POST"; req.Timeout = 90000; req.Proxy = null;
+            req.ContentType = "application/json";
+            req.Headers["Authorization"] = "Bearer " + Convert.ToString(tk["access_token"]);
+            req.Headers["chatgpt-account-id"] = Convert.ToString(tk["account_id"]);
+            req.Headers["OpenAI-Beta"] = "responses=experimental";
+            req.Headers["originator"] = "codex_cli_rs";
+            var bytes = Encoding.UTF8.GetBytes("{\"model\":\"" + model + "\",\"instructions\":\"Reply with exactly: ok\",\"input\":[{\"type\":\"message\",\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"hi\"}]}],\"stream\":true,\"store\":false}");
+            req.ContentLength = bytes.Length;
+            using (var st = req.GetRequestStream()) st.Write(bytes, 0, bytes.Length);
+            using (req.GetResponse()) { }
+        }
+        catch { }
+    }
+
     ContextMenuStrip menu;
 
     void ShowMenu()
@@ -300,6 +326,20 @@ class OrbitApp : ApplicationContext
         var autoItem = AddMenu(L10n.T("Auto select", "恢复自动") + (streak && !isAuto ? L10n.T("  ⚠ failing", "  ⚠ 连续失败") : ""), delegate { Post("/api/reset"); mem.ForgetPin(); MarkAuto(); Log.Write("pin", "cleared -> auto"); });
         // already on AUTO — nothing to reset to
         if (isAuto) autoItem.Enabled = false;
+
+        // panel-parity toggles: 292 injection + strict anti-downgrade
+        bool injOn = lastStatus != null && lastStatus.InjectOn;
+        AddMenu((injOn ? "✓ " : "○ ") + L10n.T("Inject 292 credentials", "注入 292 凭据"), delegate
+        {
+            PostJson(BaseUrl + "/api/injection", "{\"enabled\":" + (injOn ? "false" : "true") + "}");
+            Log.Write("toggle", "inject -> " + !injOn);
+        });
+        bool strictOn = lastStatus != null && lastStatus.StrictOn;
+        AddMenu((strictOn ? "✓ " : "○ ") + L10n.T("Anti-downgrade (refuse wrong model)", "严格防降智"), delegate
+        {
+            PostJson(BaseUrl + "/api/strict-model", "{\"enabled\":" + (strictOn ? "false" : "true") + "}");
+            Log.Write("toggle", "strict_model -> " + !strictOn);
+        });
         menu.Items.Add(new ToolStripSeparator());
         AddMenu(L10n.T("Restart service", "重启服务"), delegate { Balloon(L10n.T("Restarting", "正在重启"), L10n.T("service restarts in background", "服务后台重启中…")); Log.Write("action", "restart"); ThreadPool.QueueUserWorkItem(delegate { RestartService(); }); });
 
@@ -545,16 +585,31 @@ class OrbitApp : ApplicationContext
             ThreadPool.QueueUserWorkItem(delegate { Http.Post(BaseUrl + "/api/collect"); });
         }
         // upstream silently serving a different model than requested (e.g. astra -> luna):
-        // no client fix exists - rotating nodes won't help - so warn once per episode
-        if (snap != null && snap.WantModel != "" && !downNotified)
+        // no client fix exists - rotating nodes won't help - so warn once per episode,
+        // then keep probing every ~2min so we can shout the moment it recovers
+        if (snap != null && snap.WantModel != "")
         {
-            downNotified = true;
-            Log.Write("guide", "downgrade " + snap.WantModel + " -> " + snap.GotModel);
-            Balloon(L10n.T("Upstream downgraded your model", "上游偷偷换了模型"),
-                string.Format(L10n.T("Asked for {0}, got {1} - rotation won't fix this; it clears on its own later",
-                    "请求 {0}，实际给的 {1} · 换节点没用，等配额恢复即回"), snap.WantModel, snap.GotModel));
+            if (!downNotified)
+            {
+                downNotified = true;
+                Log.Write("guide", "downgrade " + snap.WantModel + " -> " + snap.GotModel);
+                Balloon(L10n.T("Upstream downgraded your model", "上游偷偷换了模型"),
+                    string.Format(L10n.T("Asked for {0}, got {1} - rotation won't fix this; watching for its return",
+                        "请求 {0}，实际给的 {1} · 换节点没用，恢复了我叫你"), snap.WantModel, snap.GotModel));
+            }
+            if ((DateTime.Now - lastProbe).TotalSeconds >= 120)
+            {
+                lastProbe = DateTime.Now;
+                var probeModel = snap.WantModel;
+                ThreadPool.QueueUserWorkItem(delegate { FireModelProbe(probeModel); });
+            }
         }
-        if (snap != null && snap.WantModel == "") downNotified = false;
+        else if (snap != null && downNotified)
+        {
+            downNotified = false;
+            Log.Write("model", "recovered");
+            Balloon(L10n.T("Model restored", "模型恢复"), L10n.T("Upstream serves your selected model again", "上游又给你选的模型了"));
+        }
 
         prevAliveInit = true; prevAlive = alive; if (node != "") prevNode = node;
 
@@ -754,7 +809,7 @@ class StatusSnapshot
     public bool Alive;
     public string Node = "";
     public long Ok, Errors, Alive2, Reachable;
-    public bool Collecting, LastCollectOk, AuthReady;
+    public bool Collecting, LastCollectOk, AuthReady, InjectOn, StrictOn;
     public long CollectTried, CollectTotal;
     public string NextCollect = "";
     public long LastMillis;
@@ -781,6 +836,7 @@ class StatusSnapshot
             o.Collecting = B(j, "collecting"); o.LastCollectOk = B(j, "last_collect_ok");
             o.CollectTried = L(j, "collect_tried"); o.CollectTotal = L(j, "collect_total");
             o.AuthReady = B(j, "auth_ready");
+            o.InjectOn = B(j, "inject"); o.StrictOn = B(j, "strict_model");
             o.NextCollect = S(j, "next_collect");
             object recent;
             if (j.TryGetValue("recent", out recent))
@@ -811,17 +867,17 @@ class StatusSnapshot
                     if (r != null && r.TryGetValue("status", out sv)) long.TryParse(Convert.ToString(sv), out st);
                     if (st == 403 || st == 429 || st >= 500) o.FailStreak++; else break;
                 }
-                // silent downgrade: newest responses call whose served model != requested
+                // silent downgrade: judge by the newest responses call that has a
+                // sniffed served-model, whatever its status (strict refusals are 422)
                 foreach (var it in o.Recent)
                 {
                     var r = it as System.Collections.Generic.Dictionary<string, object>;
                     if (r == null) continue;
-                    object pv, sv2, rmv, smv2; long st2 = 0;
-                    r.TryGetValue("path", out pv); r.TryGetValue("status", out sv2);
+                    object pv, rmv, smv2;
+                    r.TryGetValue("path", out pv);
                     r.TryGetValue("model", out rmv); r.TryGetValue("served_model", out smv2);
-                    long.TryParse(Convert.ToString(sv2), out st2);
                     string p = Convert.ToString(pv), w = Convert.ToString(rmv), g = Convert.ToString(smv2);
-                    if (st2 != 200 || g == null || g == "") continue;
+                    if (g == null || g == "") continue;
                     if (p != null && p.EndsWith("responses") && w != null && w != "" && g != w)
                     { o.WantModel = w; o.GotModel = g; }
                     break;
@@ -849,6 +905,7 @@ class StatusSnapshot
     {
         var o = new StatusSnapshot();
         o.Alive = true; o.Node = "AUTO";
+        o.InjectOn = true; o.StrictOn = true;
         o.Ok = 13; o.Errors = 1; o.Alive2 = 6; o.Reachable = 4;
         o.LastCollectOk = true; o.NextCollect = "2026-01-01T12:57:00+08:00";
         o.LastMillis = 28300;
@@ -1189,7 +1246,9 @@ class ConsoleForm : Form
 
     Label head, stats, state, nl2;
     ListBox nodes, creds, reqs;
-    Button autoBtn, switchBtn;
+    Button autoBtn, switchBtn, injBtn, strictBtn;
+    string probeModel = "gpt-6-astra";
+    bool curInj = true, curStrict = true;
     System.Windows.Forms.Timer refreshTimer;
     internal bool NoFetch; // shot mode: demo data only, never hit the live API
     System.Collections.ArrayList nodeRaw;
@@ -1197,7 +1256,7 @@ class ConsoleForm : Form
     public ConsoleForm()
     {
         Text = "CodexOrbit";
-        ClientSize = new Size(404, 470);
+        ClientSize = new Size(404, 502);
         FormBorderStyle = FormBorderStyle.FixedSingle;
         MaximizeBox = false;
         StartPosition = FormStartPosition.CenterScreen;
@@ -1244,7 +1303,34 @@ class ConsoleForm : Form
             x += 63;
         }
 
-        var hint = new Label { Text = L10n.T("Close = back to tray", "关闭 = 回到托盘"), Left = 16, Top = 444, AutoSize = true, ForeColor = Dim,
+        // second row: panel-parity toggles + manual model probe
+        int x2 = 16;
+        foreach (var b in new string[] { "inj", "strict", "probe" })
+        {
+            var btn = new Button { Left = x2, Top = 436, Width = 118, Height = 28,
+                FlatStyle = FlatStyle.Flat, BackColor = BgSoft, ForeColor = Txt, Cursor = Cursors.Hand };
+            btn.FlatAppearance.BorderSize = 0;
+            btn.FlatAppearance.MouseOverBackColor = Color.FromArgb(46, 46, 56);
+            Controls.Add(btn);
+            if (b == "inj")
+            {
+                injBtn = btn;
+                btn.Click += delegate { ToggleFlag("/api/injection", injBtn); };
+            }
+            else if (b == "strict")
+            {
+                strictBtn = btn;
+                btn.Click += delegate { ToggleFlag("/api/strict-model", strictBtn); };
+            }
+            else
+            {
+                btn.Text = L10n.T("Probe model", "探测模型");
+                btn.Click += delegate { OrbitAppHolder.App.FireModelProbe(probeModel); RefreshSoon(); };
+            }
+            x2 += 124;
+        }
+
+        var hint = new Label { Text = L10n.T("Close = back to tray", "关闭 = 回到托盘"), Left = 16, Top = 476, AutoSize = true, ForeColor = Dim,
             Font = new Font("Microsoft YaHei UI", 8f) };
 
         Controls.AddRange(new Control[] { head, stats, state, nl2, nodes, cl, creds, rl, reqs, hint });
@@ -1267,6 +1353,15 @@ class ConsoleForm : Form
     void Act(string path)
     {
         ThreadPool.QueueUserWorkItem(delegate { Http.Post(OrbitApp.BaseUrl + path); });
+        RefreshSoon();
+    }
+
+    void ToggleFlag(string path, Button b)
+    {
+        bool cur = path == "/api/injection" ? curInj : curStrict;
+        string body = "{\"enabled\":" + (cur ? "false" : "true") + "}";
+        ThreadPool.QueueUserWorkItem(delegate { OrbitApp.PostJson(OrbitApp.BaseUrl + path, body); });
+        Log.Write("toggle", path + " -> " + !cur);
         RefreshSoon();
     }
 
@@ -1297,6 +1392,21 @@ class ConsoleForm : Form
         bool warn = s != null && s.FailStreak >= 3;
         if (autoBtn != null) { autoBtn.Enabled = s == null || s.Node != "AUTO"; autoBtn.BackColor = warn && s.Node != "AUTO" ? Accent : BgSoft; }
         if (switchBtn != null) switchBtn.BackColor = warn && s.Node == "AUTO" ? Accent : BgSoft;
+        if (s != null)
+        {
+            curInj = s.InjectOn; curStrict = s.StrictOn;
+            if (s.WantModel != "") probeModel = s.WantModel;
+            if (injBtn != null)
+            {
+                injBtn.Text = L10n.T("292 inject: ", "292 注入：") + (curInj ? L10n.T("on", "开") : L10n.T("off", "关"));
+                injBtn.BackColor = curInj ? BgSoft : Color.FromArgb(70, 52, 52);
+            }
+            if (strictBtn != null)
+            {
+                strictBtn.Text = L10n.T("Anti-downgrade: ", "防降智：") + (curStrict ? L10n.T("on", "开") : L10n.T("off", "关"));
+                strictBtn.BackColor = curStrict && s.WantModel != "" ? Accent : (curStrict ? BgSoft : Color.FromArgb(70, 52, 52));
+            }
+        }
         if (s != null)
         {
             long total = s.Ok + s.Errors;
