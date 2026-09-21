@@ -258,7 +258,7 @@ class OrbitApp : ApplicationContext
 
         AddMenu(L10n.T("Switch node", "切换节点"), delegate { Post("/api/rotate"); });
         AddMenu(L10n.T("Collect 292 now", "立即采集 292"), delegate { Post("/api/collect"); Balloon(L10n.T("Collecting 292", "正在采集 292"), L10n.T("runs in background", "后台执行中…")); });
-        var autoItem = AddMenu(L10n.T("Auto select", "恢复自动"), delegate { Post("/api/reset"); mem.ForgetPin(); Log.Write("pin", "cleared -> auto"); });
+        var autoItem = AddMenu(L10n.T("Auto select", "恢复自动"), delegate { Post("/api/reset"); mem.ForgetPin(); MarkAuto(); Log.Write("pin", "cleared -> auto"); });
         // already on AUTO — nothing to reset to
         if (lastStatus != null && lastStatus.Node == "AUTO") autoItem.Enabled = false;
         menu.Items.Add(new ToolStripSeparator());
@@ -429,6 +429,8 @@ class OrbitApp : ApplicationContext
     int prevStateCount = -1;
 
     int pollBusy;
+
+    internal void MarkAuto() { if (lastStatus != null) lastStatus.Node = "AUTO"; }
 
     void Poll()
     {
@@ -769,7 +771,7 @@ class StatusCard : Form
         btnPanel = MkBtn("", 16, delegate { ShowStates(); });
         btnSwitch = MkBtn("", 82, delegate { Act("/api/rotate"); });
         btnCollect = MkBtn("", 148, delegate { Act("/api/collect"); OrbitAppHolder.App.Balloon(L10n.T("Collecting 292", "正在采集 292"), ""); });
-        btnAuto = MkBtn("", 214, delegate { Act("/api/reset"); OrbitAppHolder.App.mem.ForgetPin(); Log.Write("pin", "cleared -> auto"); });
+        btnAuto = MkBtn("", 214, delegate { Act("/api/reset"); OrbitAppHolder.App.mem.ForgetPin(); OrbitAppHolder.App.MarkAuto(); Log.Write("pin", "cleared -> auto"); });
         foreach (var b in new[] { btnPanel, btnSwitch, btnCollect, btnAuto }) { b.Top = 164; Controls.Add(b); }
 
         exitLbl = new Label { ForeColor = Dim, AutoSize = true,
@@ -896,6 +898,7 @@ class StatusCard : Form
         dot.Invalidate();
         spark.Points = s.LatencyHistory;
         spark.Invalidate();
+        btnAuto.Enabled = s.Node != "AUTO";
     }
 
     // GDI+ has no glyphs for regional-indicator flag emoji — drop them.
@@ -1009,6 +1012,7 @@ class ConsoleForm : Form
 
     Label head, stats, state, nl2;
     ListBox nodes, creds;
+    Button autoBtn;
     System.Collections.ArrayList nodeRaw;
 
     public ConsoleForm()
@@ -1049,7 +1053,7 @@ class ConsoleForm : Form
             {
                 case "Switch": btn.Text = L10n.T("Switch", "切换"); btn.Click += delegate { Act("/api/rotate"); }; break;
                 case "Collect": btn.Text = L10n.T("Collect", "采集"); btn.Click += delegate { Act("/api/collect"); OrbitAppHolder.App.Balloon(L10n.T("Collecting 292", "正在采集 292"), ""); }; break;
-                case "Auto": btn.Text = L10n.T("Auto", "自动"); btn.Click += delegate { Act("/api/reset"); OrbitAppHolder.App.mem.ForgetPin(); Log.Write("pin", "cleared -> auto"); }; break;
+                case "Auto": btn.Text = L10n.T("Auto", "自动"); autoBtn = btn; btn.Click += delegate { Act("/api/reset"); OrbitAppHolder.App.mem.ForgetPin(); OrbitAppHolder.App.MarkAuto(); Log.Write("pin", "cleared -> auto"); }; break;
                 case "Restart": btn.Text = L10n.T("Restart", "重启"); btn.Click += delegate { OrbitAppHolder.App.Balloon(L10n.T("Restarting", "正在重启"), ""); Log.Write("action", "restart"); OrbitAppHolder.App.RestartBg(); Close(); }; break;
                 case "+Sub": btn.Text = L10n.T("+Sub", "+订阅"); btn.Click += delegate { OrbitAppHolder.App.AddSource("sub"); RefreshSoon(); }; break;
                 case "+Node": btn.Text = L10n.T("+Node", "+节点"); btn.Click += delegate { OrbitAppHolder.App.AddSource("node"); RefreshSoon(); }; break;
@@ -1097,6 +1101,7 @@ class ConsoleForm : Form
 
     void ApplyData(StatusSnapshot s, string nodesJson)
     {
+        if (autoBtn != null) autoBtn.Enabled = s == null || s.Node != "AUTO";
         if (s != null)
         {
             long total = s.Ok + s.Errors;
