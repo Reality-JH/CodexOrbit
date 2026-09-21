@@ -375,6 +375,7 @@ class OrbitApp : ApplicationContext
         menu.Items.Add(lang);
 
         menu.Items.Add(new ToolStripSeparator());
+        AddMenu(L10n.T("Settings…", "设置…"), delegate { using (var f = new SettingsForm()) f.ShowDialog(); });
         AddMenu(L10n.T("Open log", "打开日志"), delegate { try { Process.Start("notepad.exe", Log.LogPath); } catch { } });
         menu.Items.Add(new ToolStripSeparator());
         AddMenu(L10n.T("Exit & restore Codex", "退出并还原 Codex"), delegate
@@ -1360,6 +1361,12 @@ class ConsoleForm : Form
             x2 += 124;
         }
 
+        var gear = new Button { Text = "⚙", Left = 356, Top = 10, Width = 32, Height = 26,
+            FlatStyle = FlatStyle.Flat, BackColor = BgSoft, ForeColor = Dim, Cursor = Cursors.Hand };
+        gear.FlatAppearance.BorderSize = 0;
+        gear.Click += delegate { using (var f = new SettingsForm()) f.ShowDialog(this); };
+        Controls.Add(gear);
+
         var hint = new Label { Text = L10n.T("Close = back to tray", "关闭 = 回到托盘"), Left = 16, Top = 476, AutoSize = true, ForeColor = Dim,
             Font = new Font("Microsoft YaHei UI", 8f) };
 
@@ -1603,6 +1610,130 @@ static class Shot
         p.AddArc(r.X, r.Bottom - d, d, d, 90, 90);
         p.CloseFigure();
         return p;
+    }
+}
+
+// Settings dialog - the useful knobs, point-and-click instead of JSON editing.
+// Writes ~/.ccodex-rotate/config.json (preserving other keys), applies the two
+// runtime toggles via API, and optionally restarts the engine so the rest bind.
+class SettingsForm : Form
+{
+    static readonly Color Bg = Color.FromArgb(23, 23, 28);
+    static readonly Color BgSoft = Color.FromArgb(34, 34, 42);
+    static readonly Color Txt = Color.FromArgb(235, 235, 240);
+    static readonly Color Dim = Color.FromArgb(150, 150, 162);
+
+    string cfgPath;
+    System.Collections.Generic.Dictionary<string, object> cfg;
+    CheckBox cStrict, cInject, cAffinity;
+    TextBox tProbeInt, tTimeout, tRetries, tProbeTimeout, tTtl, tOkInt, tRetryInt, tForce;
+
+    public SettingsForm()
+    {
+        cfgPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".ccodex-rotate", "config.json");
+        cfg = ReadCfg();
+        Text = "CodexOrbit · " + L10n.T("Settings", "设置");
+        ClientSize = new Size(348, 398);
+        FormBorderStyle = FormBorderStyle.FixedDialog;
+        MaximizeBox = false; MinimizeBox = false;
+        StartPosition = FormStartPosition.CenterScreen;
+        BackColor = Bg; ForeColor = Txt;
+        Font = new Font("Microsoft YaHei UI", 9f);
+
+        int y = 12;
+        cStrict = Chk(ref y, L10n.T("Anti-downgrade: refuse when upstream serves another model", "严格防降智（上游给的模型不对就拒绝）"), Bool("strict_model", true));
+        cInject = Chk(ref y, L10n.T("Inject 292 credentials into requests", "请求时注入 292 凭据"), Bool("inject_state", true));
+        cAffinity = Chk(ref y, L10n.T("Inject only through the node that produced it", "注入只走产出该凭据的节点"), Bool("inject_node_affinity", false));
+        tProbeInt = Num(ref y, L10n.T("Model re-probe interval, sec (0 = auto backoff)", "降级探测间隔（秒，0=自动退避）"), "probe_interval_seconds");
+        tTimeout = Num(ref y, L10n.T("Upstream timeout, sec", "上游超时（秒）"), "timeout_seconds");
+        tRetries = Num(ref y, L10n.T("Retries per request", "单请求重试次数"), "max_retries");
+        tProbeTimeout = Num(ref y, L10n.T("Per-node collect probe timeout, sec", "采集单节点探测超时（秒）"), "probe_timeout_seconds");
+        tTtl = Num(ref y, L10n.T("292 credential TTL, sec", "292 凭据有效期（秒）"), "state_ttl_seconds");
+        tOkInt = Num(ref y, L10n.T("Collect interval after success, sec", "采集成功间隔（秒）"), "collect_success_interval_seconds");
+        tRetryInt = Num(ref y, L10n.T("Collect retry interval, sec", "采集失败重试间隔（秒）"), "collect_retry_interval_seconds");
+        tForce = Num(ref y, L10n.T("Force model (blank = off)", "强制模型（留空=不强制）"), "force_model");
+
+        var bSave = Btn(L10n.T("Save", "保存"), 20, 352, delegate { Save(false); });
+        var bReboot = Btn(L10n.T("Save & restart", "保存并重启"), 128, 352, delegate { Save(true); });
+        var bCancel = Btn(L10n.T("Cancel", "取消"), 236, 352, delegate { Close(); });
+        Controls.AddRange(new Control[] { bSave, bReboot, bCancel });
+        var note = new Label { Text = L10n.T("numeric/affinity changes apply after restart", "数字与绑定类改动重启后生效"), Left = 20, Top = 330, AutoSize = true, ForeColor = Dim, Font = new Font("Microsoft YaHei UI", 8f) };
+        Controls.Add(note);
+    }
+
+    CheckBox Chk(ref int y, string text, bool val)
+    {
+        var c = new CheckBox { Text = text, Left = 20, Top = y, Width = 312, Checked = val, ForeColor = Txt, FlatStyle = FlatStyle.Flat };
+        Controls.Add(c); y += 26; return c;
+    }
+
+    TextBox Num(ref int y, string label, string key)
+    {
+        var l = new Label { Text = label, Left = 20, Top = y, AutoSize = true, ForeColor = Dim, Font = new Font("Microsoft YaHei UI", 8f) };
+        var t = new TextBox { Left = 20, Top = y + 15, Width = 308, BackColor = BgSoft, ForeColor = Txt, BorderStyle = BorderStyle.FixedSingle,
+            Text = cfg.ContainsKey(key) ? Convert.ToString(cfg[key]) : "" };
+        Controls.Add(l); Controls.Add(t); y += 38; return t;
+    }
+
+    Button Btn(string text, int x, int y, EventHandler fn)
+    {
+        var b = new Button { Text = text, Left = x, Top = y, Width = 96, Height = 28, FlatStyle = FlatStyle.Flat,
+            BackColor = BgSoft, ForeColor = Txt, Cursor = Cursors.Hand };
+        b.FlatAppearance.BorderSize = 0; b.Click += fn; return b;
+    }
+
+    System.Collections.Generic.Dictionary<string, object> ReadCfg()
+    {
+        try { return new JavaScriptSerializer().Deserialize<System.Collections.Generic.Dictionary<string, object>>(File.ReadAllText(cfgPath)); }
+        catch { return new System.Collections.Generic.Dictionary<string, object>(); }
+    }
+
+    bool Bool(string k, bool dft) { object v; return cfg.TryGetValue(k, out v) ? Convert.ToString(v) == "True" : dft; }
+
+    void Put(string key, string text, bool numeric)
+    {
+        text = text.Trim();
+        if (text == "") { cfg.Remove(key); return; }
+        if (numeric) { long n; if (long.TryParse(text, out n)) { cfg[key] = n; return; } }
+        cfg[key] = text;
+    }
+
+    void Save(bool restart)
+    {
+        cfg["strict_model"] = cStrict.Checked;
+        cfg["inject_state"] = cInject.Checked;
+        cfg["inject_node_affinity"] = cAffinity.Checked;
+        Put("probe_interval_seconds", tProbeInt.Text, true);
+        Put("timeout_seconds", tTimeout.Text, true);
+        Put("max_retries", tRetries.Text, true);
+        Put("probe_timeout_seconds", tProbeTimeout.Text, true);
+        Put("state_ttl_seconds", tTtl.Text, true);
+        Put("collect_success_interval_seconds", tOkInt.Text, true);
+        Put("collect_retry_interval_seconds", tRetryInt.Text, true);
+        Put("force_model", tForce.Text, false);
+        try { File.WriteAllText(cfgPath, Pretty(new JavaScriptSerializer().Serialize(cfg))); } catch { }
+        OrbitApp.PostJson(OrbitApp.BaseUrl + "/api/injection", "{\"enabled\":" + (cInject.Checked ? "true" : "false") + "}");
+        OrbitApp.PostJson(OrbitApp.BaseUrl + "/api/strict-model", "{\"enabled\":" + (cStrict.Checked ? "true" : "false") + "}");
+        Log.Write("settings", "saved" + (restart ? " + restart" : ""));
+        Close();
+        if (restart) { OrbitAppHolder.App.Balloon(L10n.T("Restarting", "正在重启"), L10n.T("applying settings", "应用设置中…")); OrbitAppHolder.App.RestartBg(); }
+    }
+
+    // JavaScriptSerializer emits one-line JSON; indent it so the file stays human-editable.
+    static string Pretty(string json)
+    {
+        var sb = new StringBuilder(); int depth = 0; bool inStr = false; bool esc = false;
+        foreach (var ch in json)
+        {
+            if (inStr) { sb.Append(ch); if (esc) esc = false; else if (ch == '\\') esc = true; else if (ch == '"') inStr = false; continue; }
+            if (ch == '"') { inStr = true; sb.Append(ch); continue; }
+            if (ch == '{' || ch == '[') { sb.Append(ch); sb.Append("\n"); sb.Append(' ', ++depth * 2); }
+            else if (ch == '}' || ch == ']') { sb.Append("\n"); sb.Append(' ', --depth * 2); sb.Append(ch); }
+            else if (ch == ',') { sb.Append(ch); sb.Append("\n"); sb.Append(' ', depth * 2); }
+            else if (ch == ':') { sb.Append(": "); }
+            else sb.Append(ch);
+        }
+        return sb.ToString();
     }
 }
 
