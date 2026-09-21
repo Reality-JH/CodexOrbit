@@ -1501,7 +1501,9 @@ class ConsoleForm : Form
                 object sm, rm;
                 r.TryGetValue("served_model", out sm); r.TryGetValue("model", out rm);
                 string smv = Convert.ToString(sm), rmv = Convert.ToString(rm);
-                if (smv != "" && smv != rmv) row += L10n.T(" · got:", " · 实际:") + smv;
+                if (rmv != "" && smv != "" && smv != rmv) row += " · " + rmv + "→" + smv;
+                else if (rmv != "") row += " · " + rmv;
+                else if (smv != "") row += " · " + smv;
                 object nd; if (r.TryGetValue("node", out nd)) row += " · " + StatusCard.StripFlagsText(Convert.ToString(nd));
                 reqs.Items.Add(row);
             }
@@ -1654,7 +1656,7 @@ class SettingsForm : Form
         tTtl = Num(ref y, L10n.T("292 credential TTL, sec · rec 3600", "292 凭据有效期（秒）· 推荐 3600"), "state_ttl_seconds");
         tOkInt = Num(ref y, L10n.T("Collect interval after success, sec · rec 1800", "采集成功间隔（秒）· 推荐 1800"), "collect_success_interval_seconds");
         tRetryInt = Num(ref y, L10n.T("Collect retry interval, sec · rec 300", "采集失败重试间隔（秒）· 推荐 300"), "collect_retry_interval_seconds");
-        tForce = Num(ref y, L10n.T("Force model · rec blank", "强制模型 · 推荐留空"), "force_model");
+        tForce = Num(ref y, L10n.T("Force model · rec blank (rewrites ALL incl. sub-agents)", "强制模型 · 推荐留空（会连子代理一起改写）"), "force_model");
         y += 6;
         Controls.Add(new Label { Text = L10n.T("numeric/affinity changes apply after restart", "数字与绑定类改动重启后生效"),
             Left = 20, Top = y, AutoSize = true, ForeColor = Dim2, Font = new Font("Microsoft YaHei UI", 8.5f) });
