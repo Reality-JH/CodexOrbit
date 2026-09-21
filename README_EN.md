@@ -107,6 +107,7 @@ Zero console windows, zero browser tabs. Runs silent in the tray. **It ships its
 |---|---|
 | Persistent memory | `CodexOrbit.memory.json` records the pinned node and the last good 292's model and source node |
 | Restart continuity | Empty pool + remembered credential triggers auto-collect; a remembered pin restores itself |
+| Pool watchdog | Empty 292 pool while the engine is idle -> the tray nudges a collect every 150s; the Collect button is just an accelerator |
 | Local log | `CodexOrbit.log` records startup, spawns, outages, node hops, pool changes, manual actions; open it from the tray menu |
 | Request log | Console streams every request: status, **TTFT / total time**, serving node, retries, 292-injection flag |
 
@@ -176,6 +177,7 @@ Beyond the buttons, the tray menu offers: pin node (with measured latency), 292 
 
 - New console **request log**: per-request status, TTFT/total time, serving node, retries, 292-injection flag (TTFT needs the bundled new orbit-core)
 - Release zip now bundles orbit-core - unpack and run, no more hunting for the engine
+- Empty 292 pool is self-healing now: the tray re-triggers collection, no manual clicking
 - Failure streaks proactively guide you: balloon offers a one-click fix, console/status card highlight the right button
 - Balloon guidance on missing/failed engine; empty pools show next-step hints; exit asks for confirmation
 

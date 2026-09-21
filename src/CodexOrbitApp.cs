@@ -89,6 +89,7 @@ class OrbitApp : ApplicationContext
     volatile int errSpike;
     volatile bool spikeNotified;
     DateTime spikeFixUntil = DateTime.MinValue;
+    DateTime lastCollectNudge = DateTime.MinValue;
     string tip = "CodexOrbit";
 
     public OrbitApp(bool preview)
@@ -556,6 +557,16 @@ class OrbitApp : ApplicationContext
                     mem.LastCollectAt = DateTime.Now.ToString("yyyy-MM-dd HH:mm");
                     mem.Save();
                 }
+            }
+            // pool watchdog: engine retries a failed collect on a 300s schedule - we
+            // close that gap. empty pool + idle + auth known -> nudge collect ourselves,
+            // so nobody ever has to press the button
+            if (snap.States.Count == 0 && !snap.Collecting && snap.AuthReady &&
+                (DateTime.Now - lastCollectNudge).TotalSeconds >= 150)
+            {
+                lastCollectNudge = DateTime.Now;
+                Log.Write("292", "pool empty & idle - nudging collect");
+                ThreadPool.QueueUserWorkItem(delegate { Http.Post(BaseUrl + "/api/collect"); });
             }
             // memory restore - once, on the first live poll after launch
             if (!memTried)
