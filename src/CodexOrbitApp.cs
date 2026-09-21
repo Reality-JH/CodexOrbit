@@ -618,8 +618,8 @@ class OrbitApp : ApplicationContext
                 lastModelBalloon = DateTime.Now;
                 Log.Write("guide", "downgrade " + snap.WantModel + " -> " + snap.GotModel);
                 Balloon(L10n.T("Upstream downgraded your model", "上游偷偷换了模型"),
-                    string.Format(L10n.T("Asked for {0}, got {1} - rotation won't fix this; watching for its return",
-                        "请求 {0}，实际给的 {1} · 换节点没用，恢复了我叫你"), snap.WantModel, snap.GotModel));
+                    string.Format(L10n.T("Asked {0}, got {1}. If it persists, request Trusted Access at chatgpt.com/cyber",
+                        "请求 {0}，实得 {1} · 换节点没用；长期不恢复去 chatgpt.com/cyber 申请信任验证"), snap.WantModel, snap.GotModel));
             }
             wasDown = true;
             if ((DateTime.Now - lastProbe).TotalSeconds >= ProbeIntervalSec())
@@ -1623,6 +1623,8 @@ class SettingsForm : Form
     static readonly Color Txt = Color.FromArgb(235, 235, 240);
     static readonly Color Dim = Color.FromArgb(150, 150, 162);
 
+    static readonly Color Dim2 = Color.FromArgb(196, 196, 210);
+
     string cfgPath;
     System.Collections.Generic.Dictionary<string, object> cfg;
     CheckBox cStrict, cInject, cAffinity;
@@ -1633,51 +1635,60 @@ class SettingsForm : Form
         cfgPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".ccodex-rotate", "config.json");
         cfg = ReadCfg();
         Text = "CodexOrbit · " + L10n.T("Settings", "设置");
-        ClientSize = new Size(348, 398);
+        ClientSize = new Size(368, 432);
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false; MinimizeBox = false;
         StartPosition = FormStartPosition.CenterScreen;
         BackColor = Bg; ForeColor = Txt;
         Font = new Font("Microsoft YaHei UI", 9f);
 
-        int y = 12;
+        int y = 14;
         cStrict = Chk(ref y, L10n.T("Anti-downgrade: refuse when upstream serves another model", "严格防降智（上游给的模型不对就拒绝）"), Bool("strict_model", true));
         cInject = Chk(ref y, L10n.T("Inject 292 credentials into requests", "请求时注入 292 凭据"), Bool("inject_state", true));
         cAffinity = Chk(ref y, L10n.T("Inject only through the node that produced it", "注入只走产出该凭据的节点"), Bool("inject_node_affinity", false));
-        tProbeInt = Num(ref y, L10n.T("Model re-probe interval, sec (0 = auto backoff)", "降级探测间隔（秒，0=自动退避）"), "probe_interval_seconds");
-        tTimeout = Num(ref y, L10n.T("Upstream timeout, sec", "上游超时（秒）"), "timeout_seconds");
-        tRetries = Num(ref y, L10n.T("Retries per request", "单请求重试次数"), "max_retries");
-        tProbeTimeout = Num(ref y, L10n.T("Per-node collect probe timeout, sec", "采集单节点探测超时（秒）"), "probe_timeout_seconds");
-        tTtl = Num(ref y, L10n.T("292 credential TTL, sec", "292 凭据有效期（秒）"), "state_ttl_seconds");
-        tOkInt = Num(ref y, L10n.T("Collect interval after success, sec", "采集成功间隔（秒）"), "collect_success_interval_seconds");
-        tRetryInt = Num(ref y, L10n.T("Collect retry interval, sec", "采集失败重试间隔（秒）"), "collect_retry_interval_seconds");
-        tForce = Num(ref y, L10n.T("Force model (blank = off)", "强制模型（留空=不强制）"), "force_model");
+        y += 4;
+        tProbeInt = Num(ref y, L10n.T("Model re-probe interval, sec · rec 0", "降级探测间隔（秒）· 推荐 0=自动退避"), "probe_interval_seconds");
+        tTimeout = Num(ref y, L10n.T("Upstream timeout, sec · rec 120", "上游超时（秒）· 推荐 120"), "timeout_seconds");
+        tRetries = Num(ref y, L10n.T("Retries per request · rec 3", "单请求重试次数 · 推荐 3"), "max_retries");
+        tProbeTimeout = Num(ref y, L10n.T("Collect probe timeout per node, sec · rec 6", "采集单节点探测超时（秒）· 推荐 6"), "probe_timeout_seconds");
+        tTtl = Num(ref y, L10n.T("292 credential TTL, sec · rec 3600", "292 凭据有效期（秒）· 推荐 3600"), "state_ttl_seconds");
+        tOkInt = Num(ref y, L10n.T("Collect interval after success, sec · rec 1800", "采集成功间隔（秒）· 推荐 1800"), "collect_success_interval_seconds");
+        tRetryInt = Num(ref y, L10n.T("Collect retry interval, sec · rec 300", "采集失败重试间隔（秒）· 推荐 300"), "collect_retry_interval_seconds");
+        tForce = Num(ref y, L10n.T("Force model · rec blank", "强制模型 · 推荐留空"), "force_model");
+        y += 6;
+        Controls.Add(new Label { Text = L10n.T("numeric/affinity changes apply after restart", "数字与绑定类改动重启后生效"),
+            Left = 20, Top = y, AutoSize = true, ForeColor = Dim2, Font = new Font("Microsoft YaHei UI", 8.5f) });
+        y += 24;
+        Controls.Add(Btn(L10n.T("Defaults", "推荐值"), 16, y, delegate { FillDefaults(); }));
+        Controls.Add(Btn(L10n.T("Save", "保存"), 128, y, delegate { Save(false); }));
+        Controls.Add(Btn(L10n.T("Save+restart", "保存并重启"), 240, y, delegate { Save(true); }));
+    }
 
-        var bSave = Btn(L10n.T("Save", "保存"), 20, 352, delegate { Save(false); });
-        var bReboot = Btn(L10n.T("Save & restart", "保存并重启"), 128, 352, delegate { Save(true); });
-        var bCancel = Btn(L10n.T("Cancel", "取消"), 236, 352, delegate { Close(); });
-        Controls.AddRange(new Control[] { bSave, bReboot, bCancel });
-        var note = new Label { Text = L10n.T("numeric/affinity changes apply after restart", "数字与绑定类改动重启后生效"), Left = 20, Top = 330, AutoSize = true, ForeColor = Dim, Font = new Font("Microsoft YaHei UI", 8f) };
-        Controls.Add(note);
+    void FillDefaults()
+    {
+        cStrict.Checked = true; cInject.Checked = true; cAffinity.Checked = false;
+        tProbeInt.Text = "0"; tTimeout.Text = "120"; tRetries.Text = "3";
+        tProbeTimeout.Text = "6"; tTtl.Text = "3600"; tOkInt.Text = "1800"; tRetryInt.Text = "300";
+        tForce.Text = "";
     }
 
     CheckBox Chk(ref int y, string text, bool val)
     {
-        var c = new CheckBox { Text = text, Left = 20, Top = y, Width = 312, Checked = val, ForeColor = Txt, FlatStyle = FlatStyle.Flat };
+        var c = new CheckBox { Text = text, Left = 20, Top = y, Width = 330, Checked = val, ForeColor = Txt, FlatStyle = FlatStyle.Flat };
         Controls.Add(c); y += 26; return c;
     }
 
     TextBox Num(ref int y, string label, string key)
     {
-        var l = new Label { Text = label, Left = 20, Top = y, AutoSize = true, ForeColor = Dim, Font = new Font("Microsoft YaHei UI", 8f) };
-        var t = new TextBox { Left = 20, Top = y + 15, Width = 308, BackColor = BgSoft, ForeColor = Txt, BorderStyle = BorderStyle.FixedSingle,
+        var l = new Label { Text = label, Left = 20, Top = y + 3, Width = 240, ForeColor = Dim2, Font = new Font("Microsoft YaHei UI", 8.5f) };
+        var t = new TextBox { Left = 262, Top = y, Width = 88, BackColor = BgSoft, ForeColor = Txt, BorderStyle = BorderStyle.FixedSingle,
             Text = cfg.ContainsKey(key) ? Convert.ToString(cfg[key]) : "" };
-        Controls.Add(l); Controls.Add(t); y += 38; return t;
+        Controls.Add(l); Controls.Add(t); y += 30; return t;
     }
 
     Button Btn(string text, int x, int y, EventHandler fn)
     {
-        var b = new Button { Text = text, Left = x, Top = y, Width = 96, Height = 28, FlatStyle = FlatStyle.Flat,
+        var b = new Button { Text = text, Left = x, Top = y, Width = 106, Height = 28, FlatStyle = FlatStyle.Flat,
             BackColor = BgSoft, ForeColor = Txt, Cursor = Cursors.Hand };
         b.FlatAppearance.BorderSize = 0; b.Click += fn; return b;
     }
