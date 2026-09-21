@@ -1116,6 +1116,7 @@ class ConsoleForm : Form
     Label head, stats, state, nl2;
     ListBox nodes, creds, reqs;
     Button autoBtn, switchBtn;
+    System.Windows.Forms.Timer refreshTimer;
     System.Collections.ArrayList nodeRaw;
 
     public ConsoleForm()
@@ -1172,6 +1173,16 @@ class ConsoleForm : Form
             Font = new Font("Microsoft YaHei UI", 8f) };
 
         Controls.AddRange(new Control[] { head, stats, state, nl2, nodes, cl, creds, rl, reqs, hint });
+
+        refreshTimer = new System.Windows.Forms.Timer { Interval = 4000 };
+        refreshTimer.Tick += delegate { if (Visible) Reload(); };
+        refreshTimer.Start();
+    }
+
+    protected override void OnFormClosed(FormClosedEventArgs e)
+    {
+        refreshTimer.Stop(); refreshTimer.Dispose();
+        base.OnFormClosed(e);
     }
 
     protected override void OnShown(EventArgs e) { base.OnShown(e); Reload(); }

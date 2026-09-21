@@ -177,7 +177,8 @@ Beyond the buttons, the tray menu offers: pin node (with measured latency), 292 
 
 - New console **request log**: per-request status, TTFT/total time, serving node, retries, 292-injection flag (TTFT needs the bundled new orbit-core)
 - Release zip now bundles orbit-core - unpack and run, no more hunting for the engine
-- Empty 292 pool is self-healing now: the tray re-triggers collection, no manual clicking
+- Empty 292 pool is self-healing now: the tray re-triggers collection, no manual clicking; live collect progress (x/y)
+- Console auto-refreshes every 4s (it used to fetch once on open and go stale)
 - Failure streaks proactively guide you: balloon offers a one-click fix, console/status card highlight the right button
 - Balloon guidance on missing/failed engine; empty pools show next-step hints; exit asks for confirmation
 
