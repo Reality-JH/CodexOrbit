@@ -88,8 +88,12 @@ class OrbitApp : ApplicationContext
     volatile bool alive;
     volatile int errSpike;
     volatile bool spikeNotified;
-    volatile bool downNotified;
+    volatile bool wasDown;
     DateTime lastProbe = DateTime.MinValue;
+    DateTime lastModelBalloon = DateTime.MinValue;
+    double probeEvery = 120;
+    DateTime cfgAt = DateTime.MinValue;
+    int cfgProbeSec;
     DateTime spikeFixUntil = DateTime.MinValue;
     DateTime lastCollectNudge = DateTime.MinValue;
     string tip = "CodexOrbit";
@@ -204,6 +208,25 @@ class OrbitApp : ApplicationContext
             using (req.GetResponse()) { }
         }
         catch { }
+    }
+
+    // Probe interval while downgraded: adaptive backoff 120s x1.5 -> 600s cap,
+    // or a fixed interval if the user sets probe_interval_seconds in the engine config.
+    int ProbeIntervalSec()
+    {
+        if ((DateTime.Now - cfgAt).TotalSeconds > 60)
+        {
+            cfgAt = DateTime.Now;
+            cfgProbeSec = 0;
+            try
+            {
+                var p = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".ccodex-rotate", "config.json");
+                var j = new JavaScriptSerializer().Deserialize<System.Collections.Generic.Dictionary<string, object>>(File.ReadAllText(p));
+                object v; if (j.TryGetValue("probe_interval_seconds", out v)) int.TryParse(Convert.ToString(v), out cfgProbeSec);
+            }
+            catch { }
+        }
+        return cfgProbeSec > 0 ? cfgProbeSec : (int)probeEvery;
     }
 
     // FireModelProbe sends a tiny responses request just to observe which model
@@ -585,30 +608,37 @@ class OrbitApp : ApplicationContext
             ThreadPool.QueueUserWorkItem(delegate { Http.Post(BaseUrl + "/api/collect"); });
         }
         // upstream silently serving a different model than requested (e.g. astra -> luna):
-        // no client fix exists - rotating nodes won't help - so warn once per episode,
-        // then keep probing every ~2min so we can shout the moment it recovers
+        // warn once per ~10min (the state flickers - don't balloon-spam), then keep
+        // probing on a backoff cadence so we can shout the moment it recovers
         if (snap != null && snap.WantModel != "")
         {
-            if (!downNotified)
+            if (!wasDown && (DateTime.Now - lastModelBalloon).TotalMinutes >= 10)
             {
-                downNotified = true;
+                lastModelBalloon = DateTime.Now;
                 Log.Write("guide", "downgrade " + snap.WantModel + " -> " + snap.GotModel);
                 Balloon(L10n.T("Upstream downgraded your model", "上游偷偷换了模型"),
                     string.Format(L10n.T("Asked for {0}, got {1} - rotation won't fix this; watching for its return",
                         "请求 {0}，实际给的 {1} · 换节点没用，恢复了我叫你"), snap.WantModel, snap.GotModel));
             }
-            if ((DateTime.Now - lastProbe).TotalSeconds >= 120)
+            wasDown = true;
+            if ((DateTime.Now - lastProbe).TotalSeconds >= ProbeIntervalSec())
             {
                 lastProbe = DateTime.Now;
+                probeEvery = Math.Min(probeEvery * 1.5, 600);
                 var probeModel = snap.WantModel;
                 ThreadPool.QueueUserWorkItem(delegate { FireModelProbe(probeModel); });
             }
         }
-        else if (snap != null && downNotified)
+        else if (snap != null && wasDown)
         {
-            downNotified = false;
-            Log.Write("model", "recovered");
-            Balloon(L10n.T("Model restored", "模型恢复"), L10n.T("Upstream serves your selected model again", "上游又给你选的模型了"));
+            wasDown = false;
+            probeEvery = 120;
+            if ((DateTime.Now - lastModelBalloon).TotalMinutes >= 10)
+            {
+                lastModelBalloon = DateTime.Now;
+                Log.Write("model", "recovered");
+                Balloon(L10n.T("Model restored", "模型恢复"), L10n.T("Upstream serves your selected model again", "上游又给你选的模型了"));
+            }
         }
 
         prevAliveInit = true; prevAlive = alive; if (node != "") prevNode = node;
