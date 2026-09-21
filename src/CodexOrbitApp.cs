@@ -1629,7 +1629,7 @@ class SettingsForm : Form
 
     string cfgPath;
     System.Collections.Generic.Dictionary<string, object> cfg;
-    CheckBox cStrict, cInject, cAffinity;
+    CheckBox cStrict, cInject, cAffinity, cSessLock;
     TextBox tProbeInt, tTimeout, tRetries, tProbeTimeout, tTtl, tOkInt, tRetryInt, tForce;
 
     public SettingsForm()
@@ -1637,7 +1637,7 @@ class SettingsForm : Form
         cfgPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".ccodex-rotate", "config.json");
         cfg = ReadCfg();
         Text = "CodexOrbit · " + L10n.T("Settings", "设置");
-        ClientSize = new Size(368, 432);
+        ClientSize = new Size(368, 458);
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false; MinimizeBox = false;
         StartPosition = FormStartPosition.CenterScreen;
@@ -1648,6 +1648,7 @@ class SettingsForm : Form
         cStrict = Chk(ref y, L10n.T("Anti-downgrade: refuse when upstream serves another model", "严格防降智（上游给的模型不对就拒绝）"), Bool("strict_model", true));
         cInject = Chk(ref y, L10n.T("Inject 292 credentials into requests", "请求时注入 292 凭据"), Bool("inject_state", true));
         cAffinity = Chk(ref y, L10n.T("Inject only through the node that produced it", "注入只走产出该凭据的节点"), Bool("inject_node_affinity", false));
+        cSessLock = Chk(ref y, L10n.T("Session model lock: pin each session to its first model", "会话锁模型（同一会话内换模型自动改回，防客户端偷跑）"), Bool("session_model_lock", true));
         y += 4;
         tProbeInt = Num(ref y, L10n.T("Model re-probe interval, sec · rec 0", "降级探测间隔（秒）· 推荐 0=自动退避"), "probe_interval_seconds");
         tTimeout = Num(ref y, L10n.T("Upstream timeout, sec · rec 120", "上游超时（秒）· 推荐 120"), "timeout_seconds");
@@ -1668,7 +1669,7 @@ class SettingsForm : Form
 
     void FillDefaults()
     {
-        cStrict.Checked = true; cInject.Checked = true; cAffinity.Checked = false;
+        cStrict.Checked = true; cInject.Checked = true; cAffinity.Checked = false; cSessLock.Checked = true;
         tProbeInt.Text = "0"; tTimeout.Text = "120"; tRetries.Text = "3";
         tProbeTimeout.Text = "6"; tTtl.Text = "3600"; tOkInt.Text = "1800"; tRetryInt.Text = "300";
         tForce.Text = "";
@@ -1716,6 +1717,7 @@ class SettingsForm : Form
         cfg["strict_model"] = cStrict.Checked;
         cfg["inject_state"] = cInject.Checked;
         cfg["inject_node_affinity"] = cAffinity.Checked;
+        cfg["session_model_lock"] = cSessLock.Checked;
         Put("probe_interval_seconds", tProbeInt.Text, true);
         Put("timeout_seconds", tTimeout.Text, true);
         Put("max_retries", tRetries.Text, true);
